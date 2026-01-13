@@ -1,0 +1,16 @@
+transaction_date,vendor_name,transaction_description,transaction_amount,reference_number,expense_category
+2024-01-15,Staples Inc,Office supplies - pens and paper,150.00,INV-001,Office Supplies
+2024-01-16,Amazon Web Services,Monthly cloud hosting fee,299.99,AWS-JAN24,Technology
+2024-01-17,Uber Technologies,Employee transportation,45.50,UBER-1234,Travel
+2024-01-18,Starbucks Coffee,Team meeting refreshments,67.80,SB-5678,Meals
+2024-01-19,Microsoft Corporation,Office 365 subscription,22.00,MS-O365-01,Software
+2024-01-20,Delta Airlines,Business trip - NYC,523.00,DL-98765,Travel
+2024-01-21,Office Depot,Printer cartridges,89.99,OD-4321,Office Supplies
+2024-01-22,Google Cloud,Cloud storage fees,175.00,GCP-JAN,Technology
+2024-01-23,FedEx Shipping,Package delivery,34.25,FX-11223,Shipping
+2024-01-24,WeWork,Coworking space rental,450.00,WW-JAN24,Rent
+2024-01-25,Adobe Systems,Creative Cloud license,54.99,ADOBE-CC,Software
+2024-01-26,Costco Wholesale,Office snacks,123.45,COSTCO-789,Supplies
+2024-01-27,AT&T Wireless,Mobile phone plan,85.00,ATT-JAN,Telecommunications
+2024-01-28,LinkedIn Corp,Premium subscription,29.99,LI-PREM-01,Marketing
+2024-01-29,Home Depot,Maintenance supplies,78.50,HD-2468,Maintenance
