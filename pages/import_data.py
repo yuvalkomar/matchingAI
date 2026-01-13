@@ -7,6 +7,7 @@ import pandas as pd
 from io import BytesIO
 from datetime import datetime
 import uuid
+from matching.llm_helper import auto_match_columns
 
 
 def load_file(uploaded_file):
@@ -28,9 +29,105 @@ def load_file(uploaded_file):
         return None
 
 
+def get_sample_data(df):
+    """Get first 3 rows of data for each column."""
+    sample_data = {}
+    for col in df.columns:
+        values = df[col].head(3).tolist()
+        # Convert to strings for display
+        sample_data[col] = [str(v) if pd.notna(v) else "" for v in values]
+    return sample_data
+
+
+def get_auto_mapping(df, prefix):
+    """Get or compute auto column mapping using LLM."""
+    cache_key = f"{prefix}_auto_mapping"
+    columns_key = f"{prefix}_columns_hash"
+    applied_key = f"{prefix}_mapping_applied"
+    
+    # Create a hash of current columns to detect file changes
+    current_hash = str(list(df.columns))
+    
+    # Check if columns changed (new file uploaded)
+    if st.session_state.get(columns_key) != current_hash:
+        # Clear old auto mapping and applied flag
+        if cache_key in st.session_state:
+            del st.session_state[cache_key]
+        if applied_key in st.session_state:
+            del st.session_state[applied_key]
+        st.session_state[columns_key] = current_hash
+        
+        # Clear old widget values so new suggestions take effect
+        widget_keys = [f"{prefix}_date", f"{prefix}_vendor", f"{prefix}_description",
+                       f"{prefix}_amount", f"{prefix}_money_in", f"{prefix}_money_out",
+                       f"{prefix}_reference", f"{prefix}_category", f"{prefix}_amount_mode",
+                       f"{prefix}_sign_convention"]
+        for key in widget_keys:
+            if key in st.session_state:
+                del st.session_state[key]
+    
+    # Compute if not cached
+    if cache_key not in st.session_state:
+        columns = list(df.columns)
+        sample_data = get_sample_data(df)
+        
+        with st.spinner("🤖 AI analyzing columns..."):
+            mapping, success = auto_match_columns(columns, sample_data)
+        
+        if success and mapping:
+            st.session_state[cache_key] = mapping
+        else:
+            st.session_state[cache_key] = {}
+    
+    return st.session_state.get(cache_key, {})
+
+
+def apply_auto_mapping_to_widgets(df, prefix, auto_map):
+    """Pre-populate widget values with auto-mapping suggestions."""
+    applied_key = f"{prefix}_mapping_applied"
+    
+    # Only apply once per file
+    if st.session_state.get(applied_key):
+        return
+    
+    columns = [''] + list(df.columns)
+    
+    # Set widget values directly in session_state
+    if auto_map.get('date') in columns:
+        st.session_state[f"{prefix}_date"] = auto_map['date']
+    if auto_map.get('vendor') in columns:
+        st.session_state[f"{prefix}_vendor"] = auto_map['vendor']
+    if auto_map.get('description') in columns:
+        st.session_state[f"{prefix}_description"] = auto_map['description']
+    if auto_map.get('amount') in columns:
+        st.session_state[f"{prefix}_amount"] = auto_map['amount']
+    if auto_map.get('money_in') in columns:
+        st.session_state[f"{prefix}_money_in"] = auto_map['money_in']
+    if auto_map.get('money_out') in columns:
+        st.session_state[f"{prefix}_money_out"] = auto_map['money_out']
+    if auto_map.get('reference') in columns:
+        st.session_state[f"{prefix}_reference"] = auto_map['reference']
+    if auto_map.get('category') in columns:
+        st.session_state[f"{prefix}_category"] = auto_map['category']
+    
+    # Set amount mode based on detected columns
+    if auto_map.get('money_in') or auto_map.get('money_out'):
+        st.session_state[f"{prefix}_amount_mode"] = "Separate In/Out columns"
+    
+    st.session_state[applied_key] = True
+
+
 def render_column_mapping(df, prefix, source_name):
-    """Render column mapping UI for a dataframe."""
+    """Render column mapping UI for a dataframe with LLM auto-suggestions."""
     st.markdown(f"#### Map {source_name} Columns")
+    
+    # Get auto-mapping suggestions
+    auto_map = get_auto_mapping(df, prefix)
+    
+    # Apply auto-mapping to widget values (only once)
+    if auto_map:
+        apply_auto_mapping_to_widgets(df, prefix, auto_map)
+        st.success("✨ AI suggested column mappings (adjust if needed)")
     
     columns = [''] + list(df.columns)
     
@@ -249,62 +346,71 @@ def normalize_transactions(df, mapping, source):
 
 
 def render():
-    """Render the data import page."""
+    """Render the data import page with styled UI."""
     
-    st.title("📥 Import Data")
-    st.markdown("Upload your company ledger and bank statement files, then map columns to a common format.")
+    # Compact page title
+    st.markdown("### 📥 Import Data")
     
-    # File upload section
-    st.markdown("## Upload Files")
+    # File upload section - Step 1: Ledger
+    st.markdown("**Step 1: Upload Ledger**")
     
-    col1, col2 = st.columns(2)
+    ledger_file = st.file_uploader(
+        "Upload ledger file (CSV or Excel)",
+        type=['csv', 'xlsx', 'xls'],
+        key='ledger_upload',
+        help="CSV or Excel file with company ledger transactions",
+        label_visibility="collapsed"
+    )
     
-    with col1:
-        st.markdown("### Company Ledger")
-        ledger_file = st.file_uploader(
-            "Upload ledger file",
-            type=['csv', 'xlsx', 'xls'],
-            key='ledger_upload',
-            help="CSV or Excel file with company ledger transactions"
-        )
-        
-        if ledger_file:
-            ledger_df = load_file(ledger_file)
-            if ledger_df is not None:
-                st.session_state.ledger_df = ledger_df
-                st.success(f"✅ Loaded {len(ledger_df)} rows")
-                
-                with st.expander("Preview Ledger Data", expanded=True):
-                    st.dataframe(ledger_df.head(10), use_container_width=True)
+    if ledger_file:
+        ledger_df = load_file(ledger_file)
+        if ledger_df is not None:
+            st.session_state.ledger_df = ledger_df
+            st.markdown(f"""
+            <div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: #e6f4ea; border-radius: 8px; margin: 12px 0;">
+                <span style="color: #137333; font-weight: 500;">✓ Loaded {len(ledger_df)} rows from {ledger_file.name}</span>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            with st.expander("📋 Preview Ledger Data", expanded=False):
+                st.dataframe(ledger_df.head(10), use_container_width=True)
     
-    with col2:
-        st.markdown("### Bank Transactions")
-        bank_file = st.file_uploader(
-            "Upload bank file",
-            type=['csv', 'xlsx', 'xls'],
-            key='bank_upload',
-            help="CSV or Excel file with bank transactions"
-        )
-        
-        if bank_file:
-            bank_df = load_file(bank_file)
-            if bank_df is not None:
-                st.session_state.bank_df = bank_df
-                st.success(f"✅ Loaded {len(bank_df)} rows")
-                
-                with st.expander("Preview Bank Data", expanded=True):
-                    st.dataframe(bank_df.head(10), use_container_width=True)
+    # File upload section - Step 2: Bank
+    st.markdown("**Step 2: Upload Bank**")
     
-    st.divider()
+    bank_file = st.file_uploader(
+        "Upload bank file (CSV or Excel)",
+        type=['csv', 'xlsx', 'xls'],
+        key='bank_upload',
+        help="CSV or Excel file with bank transactions",
+        label_visibility="collapsed"
+    )
+    
+    if bank_file:
+        bank_df = load_file(bank_file)
+        if bank_df is not None:
+            st.session_state.bank_df = bank_df
+            st.markdown(f"""
+            <div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: #e6f4ea; border-radius: 8px; margin: 12px 0;">
+                <span style="color: #137333; font-weight: 500;">✓ Loaded {len(bank_df)} rows from {bank_file.name}</span>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            with st.expander("📋 Preview Bank Data", expanded=False):
+                st.dataframe(bank_df.head(10), use_container_width=True)
     
     # Column mapping section
     if st.session_state.ledger_df is not None and st.session_state.bank_df is not None:
-        st.markdown("## Map Columns")
-        st.markdown("Map the columns from each file to the normalized schema.")
+        st.markdown("**Step 3: Map Columns**")
         
         col1, col2 = st.columns(2)
         
         with col1:
+            st.markdown("""
+            <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                <h4 style="font-size: 14px; font-weight: 500; color: #202124; margin: 0 0 12px 0;">📄 Ledger Columns</h4>
+            </div>
+            """, unsafe_allow_html=True)
             ledger_mapping = render_column_mapping(
                 st.session_state.ledger_df,
                 'ledger',
@@ -314,6 +420,11 @@ def render():
                 st.session_state.ledger_mapping = ledger_mapping
         
         with col2:
+            st.markdown("""
+            <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                <h4 style="font-size: 14px; font-weight: 500; color: #202124; margin: 0 0 12px 0;">🏦 Bank Columns</h4>
+            </div>
+            """, unsafe_allow_html=True)
             bank_mapping = render_column_mapping(
                 st.session_state.bank_df,
                 'bank',
@@ -322,63 +433,75 @@ def render():
             if bank_mapping:
                 st.session_state.bank_mapping = bank_mapping
         
-        st.divider()
+        st.markdown("<div style='height: 24px'></div>", unsafe_allow_html=True)
         
-        # Normalize and proceed
+        # Normalize and proceed button
         if st.session_state.ledger_mapping and st.session_state.bank_mapping:
             col1, col2, col3 = st.columns([1, 2, 1])
             
             with col2:
-                if st.button("✅ Normalize Data & Continue", type="primary", use_container_width=True):
+                if st.button("🚀 Process Files & Start Matching", type="primary", use_container_width=True):
                     # Normalize both datasets
-                    with st.spinner("Normalizing transactions..."):
-                        normalized_ledger = normalize_transactions(
-                            st.session_state.ledger_df,
-                            st.session_state.ledger_mapping,
-                            'ledger'
-                        )
-                        normalized_bank = normalize_transactions(
-                            st.session_state.bank_df,
-                            st.session_state.bank_mapping,
-                            'bank'
-                        )
-                        
-                        st.session_state.normalized_ledger = normalized_ledger
-                        st.session_state.normalized_bank = normalized_bank
-                        
-                        # Run initial matching
-                        from matching.engine import MatchingEngine
-                        engine = MatchingEngine(
-                            vendor_threshold=st.session_state.vendor_threshold,
-                            amount_tolerance=st.session_state.amount_tolerance,
-                            date_window=st.session_state.date_window,
-                            require_reference=st.session_state.require_reference
-                        )
-                        
-                        candidates = engine.find_all_candidates(
-                            normalized_ledger,
-                            normalized_bank
-                        )
-                        
-                        st.session_state.match_candidates = candidates
-                        st.session_state.current_match_index = 0
+                    progress_text = st.empty()
+                    progress_bar = st.progress(0)
                     
-                    st.success(f"✅ Normalized {len(normalized_ledger)} ledger and {len(normalized_bank)} bank transactions")
-                    st.success(f"🔍 Found {len(candidates)} potential matches to review")
+                    progress_text.text("Normalizing transactions...")
+                    normalized_ledger = normalize_transactions(
+                        st.session_state.ledger_df,
+                        st.session_state.ledger_mapping,
+                        'ledger'
+                    )
+                    normalized_bank = normalize_transactions(
+                        st.session_state.bank_df,
+                        st.session_state.bank_mapping,
+                        'bank'
+                    )
+                    
+                    st.session_state.normalized_ledger = normalized_ledger
+                    st.session_state.normalized_bank = normalized_bank
+                    
+                    progress_bar.progress(20)
+                    
+                    # Run AI-powered matching (heuristics + LLM)
+                    progress_text.text("🤖 AI analyzing matches...")
+                    
+                    from matching.engine import MatchingEngine
+                    from matching.llm_helper import evaluate_match_batch
+                    
+                    engine = MatchingEngine(
+                        vendor_threshold=st.session_state.vendor_threshold,
+                        amount_tolerance=st.session_state.amount_tolerance,
+                        date_window=st.session_state.date_window,
+                        require_reference=st.session_state.require_reference
+                    )
+                    
+                    def update_progress(current, total):
+                        pct = 20 + int((current / total) * 75)
+                        progress_bar.progress(pct)
+                        progress_text.text(f"🤖 AI analyzing match {current}/{total}...")
+                    
+                    # Use LLM-powered matching
+                    match_results = evaluate_match_batch(
+                        normalized_ledger,
+                        normalized_bank,
+                        engine,
+                        progress_callback=update_progress
+                    )
+                    
+                    progress_bar.progress(100)
+                    progress_text.text("✅ Matching complete!")
+                    
+                    st.session_state.match_results = match_results
+                    st.session_state.current_match_index = 0
+                    
+                    # Count matches found
+                    matches_found = sum(1 for r in match_results if r['bank_txn'] is not None)
+                    
+                    st.success(f"✅ Processed {len(normalized_ledger)} ledger and {len(normalized_bank)} bank transactions")
+                    st.success(f"🤖 AI found {matches_found} matches to review")
                     
                     # Navigate to review
                     st.session_state.current_page = 'review'
                     st.rerun()
     else:
         st.info("👆 Upload both files to continue")
-    
-    # Demo data helper
-    st.divider()
-    with st.expander("💡 Need demo data?"):
-        st.markdown("""
-        Demo files are included in the `data/` folder:
-        - `data/demo_ledger.csv` - Sample company ledger
-        - `data/demo_bank.csv` - Sample bank transactions
-        
-        Download and upload these files to test the app.
-        """)

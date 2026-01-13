@@ -12,11 +12,64 @@ load_dotenv()
 
 # Configure page
 st.set_page_config(
-    page_title="Transaction Reconciliation",
-    page_icon="🔄",
+    page_title="MatchingAI",
+    page_icon="assets/small_logo.jpg",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Brand colors CSS (Blue: #1E3A8A, Gold: #D4AF37)
+st.markdown("""
+<style>
+    /* Primary button - Gold */
+    .stButton > button[kind="primary"] {
+        background-color: #D4AF37 !important;
+        border-color: #D4AF37 !important;
+        color: #1E3A8A !important;
+    }
+    .stButton > button[kind="primary"]:hover {
+        background-color: #B8960C !important;
+        border-color: #B8960C !important;
+    }
+    /* Secondary buttons - Blue */
+    .stButton > button:not([kind="primary"]) {
+        border-color: #1E3A8A !important;
+        color: #1E3A8A !important;
+    }
+    .stButton > button:not([kind="primary"]):hover {
+        background-color: #1E3A8A !important;
+        color: white !important;
+    }
+    /* Progress bar */
+    .stProgress > div > div > div > div {
+        background-color: #D4AF37 !important;
+    }
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #1E3A8A !important;
+    }
+    [data-testid="stSidebar"] * {
+        color: white !important;
+    }
+    [data-testid="stSidebar"] .stSlider label, 
+    [data-testid="stSidebar"] .stCheckbox label,
+    [data-testid="stSidebar"] .stNumberInput label {
+        color: white !important;
+    }
+    /* Metrics */
+    [data-testid="stMetricValue"] {
+        color: #1E3A8A !important;
+    }
+    /* Headers */
+    h1, h2, h3 {
+        color: #1E3A8A !important;
+    }
+    /* Links and accents */
+    a {
+        color: #D4AF37 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Initialize session state
 def init_session_state():
@@ -48,7 +101,6 @@ def init_session_state():
         'amount_tolerance': 0.01,
         'date_window': 3,
         'require_reference': False,
-        'use_llm': False,
         
         # Audit trail
         'audit_trail': [],
@@ -71,7 +123,7 @@ def main():
     # Sidebar navigation (only show after landing)
     if st.session_state.current_page != 'landing':
         with st.sidebar:
-            st.title("🔄 Reconciliation")
+            st.markdown("### 🔄 Reconciliation")
             st.divider()
             
             # Progress indicator
@@ -137,17 +189,13 @@ def main():
             
             st.divider()
             
-            # LLM toggle
-            st.markdown("### LLM Assistance")
-            st.session_state.use_llm = st.checkbox(
-                "Enable LLM",
-                value=st.session_state.use_llm,
-                help="Use Gemini for vendor normalization (requires API key)"
-            )
-            if st.session_state.use_llm:
-                import os
-                if not os.environ.get('GEMINI_API_KEY'):
-                    st.warning("⚠️ Set GEMINI_API_KEY in .env file")
+            # LLM Status (always on, just show status)
+            st.markdown("### 🤖 AI Status")
+            import os
+            if os.environ.get('GEMINI_API_KEY'):
+                st.success("✓ AI Ready")
+            else:
+                st.error("⚠️ Set GEMINI_API_KEY in .env")
             
             st.divider()
             

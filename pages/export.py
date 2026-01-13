@@ -130,138 +130,78 @@ def generate_audit_trail():
 def render():
     """Render the export page."""
     
-    st.title("📤 Export Results")
+    # Compact page header
+    st.markdown("### 📤 Export Results")
     
     # Check if we have data
     if not st.session_state.normalized_ledger:
-        st.warning("⚠️ No data loaded. Please import data first.")
-        if st.button("📥 Go to Import"):
+        st.warning("No data loaded. Please import data first.")
+        if st.button("📥 Go to Import", type="primary"):
             st.session_state.current_page = 'import'
             st.rerun()
         return
     
-    # Summary
-    st.markdown("## 📊 Reconciliation Summary")
-    
+    # Summary section
     unmatched_ledger = get_unmatched_ledger()
     unmatched_bank = get_unmatched_bank()
     confirmed = st.session_state.confirmed_matches
     
+    total_ledger = len(st.session_state.normalized_ledger)
+    match_rate = len(confirmed) / total_ledger * 100 if total_ledger > 0 else 0
+    
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Confirmed Matches", len(confirmed))
+        st.metric("Matched", len(confirmed))
     with col2:
-        st.metric("Unmatched Ledger", len(unmatched_ledger))
+        st.metric("Unmatched", len(unmatched_ledger) + len(unmatched_bank))
     with col3:
-        st.metric("Unmatched Bank", len(unmatched_bank))
+        st.metric("Ledger", total_ledger)
     with col4:
-        total_ledger = len(st.session_state.normalized_ledger)
-        match_rate = len(confirmed) / total_ledger * 100 if total_ledger > 0 else 0
-        st.metric("Match Rate", f"{match_rate:.1f}%")
+        st.metric("Bank", len(st.session_state.normalized_bank))
     
-    st.divider()
+    # Export options
+    st.markdown("**Downloads**")
     
-    # Download section
-    st.markdown("## 📥 Download Files")
+    # Prepare download data
+    matches_df = matches_to_df(confirmed)
+    ledger_df = transactions_to_df(unmatched_ledger)
+    bank_df = transactions_to_df(unmatched_bank)
+    audit_trail = generate_audit_trail()
+    audit_json = json.dumps(audit_trail, indent=2, default=str)
     
     col1, col2 = st.columns(2)
     
     with col1:
-        # Confirmed matches
-        st.markdown("### ✅ Confirmed Matches")
-        matches_df = matches_to_df(confirmed)
+        st.markdown(f"📊 **Matches** ({len(confirmed)})")
         if not matches_df.empty:
-            st.dataframe(matches_df.head(5), use_container_width=True)
-            st.download_button(
-                "📥 Download Confirmed Matches (CSV)",
-                df_to_csv(matches_df),
-                "confirmed_matches.csv",
-                "text/csv",
-                use_container_width=True
-            )
+            st.download_button("📥 Download CSV", df_to_csv(matches_df), "confirmed_matches.csv", "text/csv", use_container_width=True, key="dl_matches")
         else:
-            st.info("No confirmed matches")
+            st.info("No matches yet")
         
-        st.divider()
-        
-        # Unmatched ledger
-        st.markdown("### 📒 Unmatched Ledger")
-        ledger_df = transactions_to_df(unmatched_ledger)
+        st.markdown(f"📒 **Unmatched Ledger** ({len(unmatched_ledger)})")
         if not ledger_df.empty:
-            st.dataframe(ledger_df.head(5), use_container_width=True)
-            st.download_button(
-                "📥 Download Unmatched Ledger (CSV)",
-                df_to_csv(ledger_df),
-                "unmatched_ledger.csv",
-                "text/csv",
-                use_container_width=True
-            )
+            st.download_button("📥 Download CSV", df_to_csv(ledger_df), "unmatched_ledger.csv", "text/csv", use_container_width=True, key="dl_ledger")
         else:
-            st.success("All ledger transactions matched!")
+            st.success("All matched!")
     
     with col2:
-        # Unmatched bank
-        st.markdown("### 🏦 Unmatched Bank")
-        bank_df = transactions_to_df(unmatched_bank)
+        st.markdown(f"🏦 **Unmatched Bank** ({len(unmatched_bank)})")
         if not bank_df.empty:
-            st.dataframe(bank_df.head(5), use_container_width=True)
-            st.download_button(
-                "📥 Download Unmatched Bank (CSV)",
-                df_to_csv(bank_df),
-                "unmatched_bank.csv",
-                "text/csv",
-                use_container_width=True
-            )
+            st.download_button("📥 Download CSV", df_to_csv(bank_df), "unmatched_bank.csv", "text/csv", use_container_width=True, key="dl_bank")
         else:
-            st.success("All bank transactions matched!")
+            st.success("All matched!")
         
-        st.divider()
-        
-        # Audit trail
-        st.markdown("### 📋 Audit Trail")
-        audit_trail = generate_audit_trail()
-        st.json(audit_trail['summary'])
-        
-        audit_json = json.dumps(audit_trail, indent=2, default=str)
-        st.download_button(
-            "📥 Download Full Audit Trail (JSON)",
-            audit_json,
-            "audit_trail.json",
-            "application/json",
-            use_container_width=True
-        )
+        st.markdown("📋 **Audit Trail**")
+        st.download_button("📥 Download JSON", audit_json, "audit_trail.json", "application/json", use_container_width=True, key="dl_audit")
     
-    st.divider()
-    
-    # Audit trail details
-    st.markdown("## 📋 Decision History")
-    
+    # Audit trail preview
+    st.markdown("---")
     if st.session_state.audit_trail:
-        # Show recent decisions
-        with st.expander("View All Decisions", expanded=False):
-            for i, entry in enumerate(reversed(st.session_state.audit_trail[-20:])):
-                action_icons = {
-                    'match': '✅',
-                    'reject': '❌',
-                    'duplicate': '🔄',
-                    'skip': '⏭️',
-                    'undo_match': '↩️',
-                }
+        with st.expander(f"Decision History ({len(st.session_state.audit_trail)} entries)", expanded=False):
+            for entry in reversed(st.session_state.audit_trail[-10:]):
+                action_icons = {'match': '✅', 'reject': '❌', 'duplicate': '🔄', 'skip': '⏭️', 'undo_match': '↩️'}
                 icon = action_icons.get(entry['action'], '•')
-                
-                st.markdown(f"""
-                **{icon} {entry['action'].upper()}** at {entry['timestamp']}  
-                Ledger: {entry.get('ledger_vendor', 'N/A')} (${entry.get('ledger_amount', 0):,.2f})  
-                Bank: {entry.get('bank_vendor', 'N/A')} (${entry.get('bank_amount', 0):,.2f})  
-                Score: {entry.get('score', 'N/A')} | Confidence: {entry.get('confidence', 'N/A')}
-                """)
-                if entry.get('notes'):
-                    st.caption(f"Notes: {entry['notes']}")
-                st.divider()
-    else:
-        st.info("No decisions recorded yet")
-    
-    st.divider()
+                st.text(f"{icon} {entry['action'].upper()} - {entry.get('ledger_vendor', 'N/A')} | Score: {entry.get('score', 'N/A')}")
     
     # Navigation
     col1, col2 = st.columns(2)
@@ -271,7 +211,6 @@ def render():
             st.rerun()
     with col2:
         if st.button("🏠 Start Over", use_container_width=True):
-            # Reset session state
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()

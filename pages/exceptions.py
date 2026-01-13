@@ -52,12 +52,9 @@ def render_transaction_table(transactions, title, search_term=""):
         txn_type = txn.get('txn_type', 'money_out')
         type_icon = "💰" if txn_type == 'money_in' else "💸"
         
-        with st.container():
-            st.markdown(f"""
-            {type_icon} **{txn['vendor']}** - ${txn['amount']:,.2f}  
-            📅 {date_str} | {txn['description'][:50]}...  
-            """)
-            st.divider()
+        st.markdown(f"{type_icon} **{txn['vendor']}** — ${txn['amount']:,.2f}")
+        st.caption(f"{date_str} | {txn['description'][:30]}...")
+        st.divider()
 
 
 def render_match_pair(match):
@@ -65,51 +62,42 @@ def render_match_pair(match):
     ledger = match['ledger_txn']
     bank = match['bank_txn']
     
-    with st.container():
-        col1, col2 = st.columns(2)
+    st.markdown(f"📒 {ledger['vendor']} — ${ledger['amount']:,.2f}")
+    st.markdown(f"🏦 {bank['vendor']} — ${bank['amount']:,.2f}")
+    st.caption(f"Score: {match['score']:.2f}")
+    
+    # Undo button
+    if st.button("↩️ Undo", key=f"undo_{ledger['id']}_{bank['id']}", use_container_width=True):
+        # Remove from confirmed matches
+        st.session_state.confirmed_matches = [
+            m for m in st.session_state.confirmed_matches
+            if m['ledger_txn']['id'] != ledger['id']
+        ]
+        # Remove from matched IDs
+        st.session_state.matched_bank_ids.discard(bank['id'])
+        st.session_state.matched_ledger_ids.discard(ledger['id'])
         
-        with col1:
-            st.markdown(f"**📒 {ledger['vendor']}**")
-            st.markdown(f"${ledger['amount']:,.2f}")
-        
-        with col2:
-            st.markdown(f"**🏦 {bank['vendor']}**")
-            st.markdown(f"${bank['amount']:,.2f}")
-        
-        st.caption(f"Score: {match['score']:.2f} | {match['confidence']} confidence")
-        
-        # Undo button
-        if st.button("↩️ Undo", key=f"undo_{ledger['id']}_{bank['id']}", use_container_width=True):
-            # Remove from confirmed matches
-            st.session_state.confirmed_matches = [
-                m for m in st.session_state.confirmed_matches
-                if m['ledger_txn']['id'] != ledger['id']
-            ]
-            # Remove from matched IDs
-            st.session_state.matched_bank_ids.discard(bank['id'])
-            st.session_state.matched_ledger_ids.discard(ledger['id'])
-            
-            # Add undo to audit trail
-            st.session_state.audit_trail.append({
-                'timestamp': st.session_state.audit_trail[-1]['timestamp'] if st.session_state.audit_trail else '',
-                'action': 'undo_match',
-                'ledger_id': ledger['id'],
-                'bank_id': bank['id'],
-            })
-            st.rerun()
-        
-        st.divider()
+        # Add undo to audit trail
+        st.session_state.audit_trail.append({
+            'timestamp': st.session_state.audit_trail[-1]['timestamp'] if st.session_state.audit_trail else '',
+            'action': 'undo_match',
+            'ledger_id': ledger['id'],
+            'bank_id': bank['id'],
+        })
+        st.rerun()
+    st.divider()
 
 
 def render():
-    """Render the exceptions dashboard."""
+    """Render the exceptions dashboard with styled UI."""
     
-    st.title("⚠️ Exceptions Dashboard")
+    # Compact page header
+    st.markdown("### ⚠️ Exceptions")
     
     # Check if we have data
     if not st.session_state.normalized_ledger:
-        st.warning("⚠️ No data loaded. Please import data first.")
-        if st.button("📥 Go to Import"):
+        st.warning("No data loaded. Please import data first.")
+        if st.button("📥 Go to Import", type="primary"):
             st.session_state.current_page = 'import'
             st.rerun()
         return
@@ -119,24 +107,21 @@ def render():
     unmatched_bank = get_unmatched_bank()
     confirmed = st.session_state.confirmed_matches
     
+    # Compact summary stats
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Unmatched Ledger", len(unmatched_ledger))
     with col2:
-        st.metric("Confirmed Matches", len(confirmed))
+        st.metric("Confirmed", len(confirmed))
     with col3:
         st.metric("Unmatched Bank", len(unmatched_bank))
     
-    st.divider()
-    
-    # Search and filter
+    # Search and re-run toolbar
     search_col1, search_col2 = st.columns([3, 1])
     with search_col1:
-        search_term = st.text_input("🔍 Search transactions", placeholder="Search by vendor, description, or reference...")
+        search_term = st.text_input("🔍 Search", placeholder="Search by vendor, description...", label_visibility="collapsed")
     with search_col2:
-        st.markdown("")
-        st.markdown("")
-        if st.button("🔄 Re-run Matching", use_container_width=True):
+        if st.button("🔄 Re-run", use_container_width=True, type="primary"):
             # Re-run matching with current rules
             engine = MatchingEngine(
                 vendor_threshold=st.session_state.vendor_threshold,
@@ -161,23 +146,19 @@ def render():
             else:
                 st.info("No new matches found with current rules.")
     
-    st.divider()
-    
-    # Three columns
+    # Three columns - exception groups
     left_col, mid_col, right_col = st.columns(3)
     
     with left_col:
-        st.markdown("### 📒 Unmatched Ledger")
-        st.markdown(f"*{len(unmatched_ledger)} transactions*")
+        st.markdown(f"**📒 Unmatched Ledger ({len(unmatched_ledger)})**")
         
-        with st.container(height=400):
+        with st.container(height=300):
             render_transaction_table(unmatched_ledger, "unmatched ledger entries", search_term)
     
     with mid_col:
-        st.markdown("### ✅ Confirmed Matches")
-        st.markdown(f"*{len(confirmed)} pairs*")
+        st.markdown(f"**✅ Confirmed ({len(confirmed)})**")
         
-        with st.container(height=400):
+        with st.container(height=300):
             if not confirmed:
                 st.info("No confirmed matches yet")
             else:
@@ -185,24 +166,10 @@ def render():
                     render_match_pair(match)
     
     with right_col:
-        st.markdown("### 🏦 Unmatched Bank")
-        st.markdown(f"*{len(unmatched_bank)} transactions*")
+        st.markdown(f"**🏦 Unmatched Bank ({len(unmatched_bank)})**")
         
-        with st.container(height=400):
+        with st.container(height=300):
             render_transaction_table(unmatched_bank, "unmatched bank entries", search_term)
-    
-    st.divider()
-    
-    # Rule adjustments reminder
-    st.info("""
-    💡 **Tip:** Adjust matching rules in the sidebar to find more matches:
-    - Lower **Vendor Similarity** threshold to match vendors with different names
-    - Increase **Amount Tolerance** to allow small differences
-    - Increase **Date Window** to match transactions on different days
-    - Toggle **Require Reference** if references are unreliable
-    
-    After adjusting, click **Re-run Matching** to find new candidates.
-    """)
     
     # Navigation
     col1, col2 = st.columns(2)
