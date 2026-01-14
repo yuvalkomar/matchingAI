@@ -12,15 +12,46 @@ def get_global_css() -> str:
         background: #f8f9fa;
     }
     
+    /* AGGRESSIVE TOP MARGIN FIX */
     .main .block-container {
-        padding-top: 1rem;
-        padding-bottom: 2rem;
+        padding-top: 0 !important;
+        padding-bottom: 1rem;
         max-width: 100%;
     }
     
-    /* Hide default Streamlit header */
+    /* Hide default Streamlit header completely */
     header[data-testid="stHeader"] {
-        background: transparent;
+        display: none !important;
+        height: 0 !important;
+        min-height: 0 !important;
+    }
+    
+    /* Target all possible container classes */
+    .stMainBlockContainer, 
+    .block-container, 
+    [data-testid="stAppViewBlockContainer"],
+    [data-testid="stAppViewContainer"],
+    .appview-container,
+    section.main,
+    .main > div {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+    
+    /* Streamlit's root container */
+    .stApp > header + div {
+        padding-top: 0 !important;
+    }
+    
+    /* The main content wrapper - minimal padding */
+    [data-testid="stMainBlockContainer"] {
+        padding-top: 0.5rem !important;
+        margin-top: -1rem !important;
+    }
+    
+    /* Reduce vertical block spacing */
+    [data-testid="stVerticalBlock"] {
+        gap: 0.5rem !important;
     }
     
     /* ===== TYPOGRAPHY ===== */

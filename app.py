@@ -6,6 +6,7 @@ transactions with bank transactions using transparent heuristics and optional LL
 
 import streamlit as st
 from dotenv import load_dotenv
+from styles.theme import get_global_css
 
 # Load environment variables from .env file
 load_dotenv()
@@ -17,6 +18,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Inject global CSS theme (includes top margin fix)
+st.markdown(get_global_css(), unsafe_allow_html=True)
 
 # Brand colors CSS (Blue: #1E3A8A, Gold: #D4AF37)
 st.markdown("""
