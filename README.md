@@ -1,24 +1,68 @@
 # Transaction Reconciliation App
 
-A human-in-the-loop Streamlit application for reconciling company ledger transactions with bank transactions using transparent heuristics and optional LLM assistance.
+A modern, user-friendly web application for reconciling company ledger transactions with bank transactions using AI-powered matching.
 
 ## Features
 
 - **Four-Step Workflow**: Import → Review → Exceptions → Export
-- **Transparent Heuristics**: All matching decisions include human-readable explanations
-- **User Control**: No auto-confirmation; human approves every match
-- **Optional LLM**: OpenAI integration for vendor normalization (behind toggle)
-- **Full Audit Trail**: Every decision tracked with timestamps and rule configurations
+- **AI-Powered Matching**: Advanced matching algorithms with transparent explanations
+- **User Control**: Human approves every match - no automatic confirmations
+- **Full Audit Trail**: Complete history of all decisions and configurations
+- **Modern UI**: Beautiful, intuitive interface designed for non-technical users
+
+## Architecture
+
+- **Frontend**: React + TypeScript + Tailwind CSS (Vite)
+- **Backend**: FastAPI (Python)
+- **Matching Engine**: Heuristic-based with optional LLM assistance
 
 ## Quick Start
 
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- GEMINI_API_KEY (optional, for AI features)
+
+### Backend Setup
+
 ```bash
-# Install dependencies
+# Install Python dependencies
 pip install -r requirements.txt
 
-# Run the app
-streamlit run app.py
+# Set up environment variables (optional, for AI features)
+echo "GEMINI_API_KEY=your-api-key-here" > .env
+
+# Run the backend server (from project root)
+python -m uvicorn backend.api.main:app --reload --port 8000
 ```
+
+The backend will be available at `http://localhost:8000`
+
+### Frontend Setup
+
+```bash
+# Install Node dependencies
+cd frontend
+npm install
+
+# Run the development server
+npm run dev
+```
+
+The frontend will be available at `http://localhost:5173`
+
+## Usage
+
+1. **Import**: Upload your company ledger and bank transaction files (CSV or Excel)
+2. **Map Columns**: Use AI suggestions or manually map columns
+3. **Review**: Review AI-suggested matches one by one
+4. **Exceptions**: Handle unmatched transactions
+5. **Export**: Download results and audit trail
+
+## API Documentation
+
+Once the backend is running, visit `http://localhost:8000/docs` for interactive API documentation.
 
 ## Demo Data
 
@@ -26,108 +70,60 @@ Demo CSV files are included in the `data/` folder:
 - `data/demo_ledger.csv` - Sample company ledger transactions
 - `data/demo_bank.csv` - Sample bank transactions
 
-## Workflow
-
-### 1. Import Data
-- Upload company ledger (CSV/Excel)
-- Upload bank transactions (CSV/Excel)
-- Map columns to normalized schema
-- Preview and validate data
-
-### 2. Review Matches
-- Review suggested matches one at a time
-- Side-by-side comparison of ledger and bank entries
-- See matching logic with explanations
-- Actions: Match, Not a Match, Flag as Duplicate, Skip
-
-### 3. Exceptions Dashboard
-- View unmatched ledger transactions
-- View unmatched bank transactions
-- Adjust matching rules and re-run
-- Search and filter exceptions
-
-### 4. Export
-- Download confirmed matches (CSV)
-- Download unmatched ledger entries (CSV)
-- Download unmatched bank entries (CSV)
-- Download full audit trail (JSON)
-
 ## Matching Logic
 
 The heuristic matching engine computes a score (0-1) from these components:
 
 | Component | Weight | Description |
 |-----------|--------|-------------|
-| Amount Match | 40% | Exact match or within tolerance |
+| Amount Match | 35% | Exact match or within tolerance |
 | Date Proximity | 25% | Days between transactions |
 | Vendor Similarity | 30% | RapidFuzz string similarity |
 | Reference Match | 5% | Optional exact reference match |
+| Transaction Type | 5% | Money in vs money out |
 
 ### Confidence Levels
+
 - **High** (≥0.85): Strong match, likely correct
 - **Medium** (0.65-0.84): Possible match, review carefully
 - **Low** (<0.65): Weak match, probably not a match
 
-### Explanation Examples
-- "Exact amount match ($150.00)"
-- "Amount difference $0.50 within tolerance"
-- "Date difference: 1 day"
-- "Vendor similarity: 92% ('Staples Inc' vs 'Staples')"
-- "Reference match: INV-001"
-
 ## LLM Integration
 
-LLM assistance is **optional** and used only for:
+LLM assistance is **optional** and used for:
 - Vendor name normalization (e.g., "AMZN" → "Amazon")
-- Semantic similarity between descriptions
-
-### Important Notes
-- LLM is behind a user toggle (disabled by default)
-- Requires `GEMINI_API_KEY` in `.env` file
-- LLM **never** decides if something is a match
-- Heuristics always dominate
-- System works fully without LLM
+- Automatic column mapping
+- Enhanced match explanations
 
 ### Enable LLM
+
 1. Get your API key from: https://makersuite.google.com/app/apikey
 2. Add it to the `.env` file:
 ```
 GEMINI_API_KEY=your-api-key-here
 ```
-3. Enable the LLM toggle in the sidebar
+3. The app will automatically use AI features when available
 
-## Audit Trail
+## Development
 
-Every user decision is tracked with:
-- Timestamp
-- Action (match/reject/duplicate/skip)
-- Ledger transaction ID
-- Bank transaction ID (if applicable)
-- Match score and confidence
-- Explanation reasons
-- Matching rule configuration at time of decision
-
-## Architecture
+### Project Structure
 
 ```
-matchingAI/
-├── app.py                 # Main entry point
-├── requirements.txt       # Dependencies
-├── README.md             # This file
-├── data/
-│   ├── demo_ledger.csv   # Demo ledger data
-│   └── demo_bank.csv     # Demo bank data
-├── pages/
-│   ├── __init__.py
-│   ├── landing.py        # Landing page
-│   ├── import_data.py    # Data import & mapping
-│   ├── review_matches.py # Match review screen
-│   ├── exceptions.py     # Exceptions dashboard
-│   └── export.py         # Export & audit
-└── matching/
-    ├── __init__.py
-    ├── engine.py         # Heuristic matching engine
-    └── llm_helper.py     # Optional LLM integration
+project/
+├── backend/
+│   ├── api/
+│   │   ├── main.py          # FastAPI application
+│   │   ├── routes/           # API route handlers
+│   │   └── models.py         # Pydantic models
+│   └── matching/             # Matching engine (unchanged)
+├── frontend/
+│   ├── src/
+│   │   ├── components/       # Reusable UI components
+│   │   ├── pages/            # Page components
+│   │   ├── services/         # API client
+│   │   └── types/            # TypeScript types
+│   └── package.json
+└── data/                      # Demo data files
 ```
 
 ## License

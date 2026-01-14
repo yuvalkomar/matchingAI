@@ -6,8 +6,20 @@ Uses Google Gemini API. Heuristics find candidates, LLM makes final decision wit
 import os
 import json
 from typing import Dict, Optional, Tuple, List
-import streamlit as st
 from dotenv import load_dotenv
+import concurrent.futures
+
+# Optional streamlit import (for backward compatibility)
+try:
+    import streamlit as st
+    HAS_STREAMLIT = True
+except ImportError:
+    HAS_STREAMLIT = False
+    # Create a dummy st object for when streamlit is not available
+    class DummyStreamlit:
+        def warning(self, msg):
+            print(f"WARNING: {msg}")
+    st = DummyStreamlit()
 
 # Load environment variables from .env file
 load_dotenv()
@@ -193,13 +205,14 @@ Existing explanations: {base_explanations}"""
         return base_explanations, False
 
 
-def auto_match_columns(columns: list, sample_data: dict) -> Tuple[Dict[str, str], bool]:
+def auto_match_columns(columns: list, sample_data: dict, timeout: int = 10) -> Tuple[Dict[str, str], bool]:
     """
     Use LLM to automatically match columns to categories based on column names and sample data.
     
     Args:
         columns: List of column names from the uploaded file
         sample_data: Dict mapping column names to list of first 3 row values
+        timeout: Maximum time to wait for LLM response in seconds (default: 10)
     
     Returns:
         (mapping_dict, success)
@@ -215,6 +228,8 @@ def auto_match_columns(columns: list, sample_data: dict) -> Tuple[Dict[str, str]
     
     try:
         import google.generativeai as genai
+        import signal
+        
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.5-flash')
         
@@ -248,7 +263,19 @@ Example response:
 
 Analyze and match:"""
 
-        response = model.generate_content(prompt)
+        # Use timeout for the API call
+        def call_llm():
+            return model.generate_content(prompt)
+        
+        # Use ThreadPoolExecutor with timeout
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(call_llm)
+            try:
+                response = future.result(timeout=timeout)
+            except concurrent.futures.TimeoutError:
+                if HAS_STREAMLIT:
+                    st.warning(f"⚠️ AI column matching timed out after {timeout} seconds")
+                return {}, False
         
         # Extract JSON from response
         response_text = response.text.strip()
@@ -270,9 +297,20 @@ Analyze and match:"""
         
         return valid_mapping, True
         
+    except json.JSONDecodeError as e:
+        # JSON parsing failed
+        if HAS_STREAMLIT:
+            st.warning(f"⚠️ AI column matching: Invalid response format")
+        return {}, False
+    except concurrent.futures.TimeoutError:
+        # Timeout occurred (caught in inner try/except, but also here as backup)
+        if HAS_STREAMLIT:
+            st.warning(f"⚠️ AI column matching timed out after {timeout} seconds")
+        return {}, False
     except Exception as e:
-        # Show warning so user knows what happened
-        st.warning(f"⚠️ AI column matching unavailable: {str(e)}")
+        # Other errors
+        if HAS_STREAMLIT:
+            st.warning(f"⚠️ AI column matching unavailable: {str(e)}")
         return {}, False
 
 

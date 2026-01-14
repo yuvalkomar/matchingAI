@@ -1,0 +1,3 @@
+@echo off
+echo Starting FastAPI backend server...
+python -m uvicorn backend.api.main:app --reload --port 8000 --host 127.0.0.1
