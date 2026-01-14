@@ -1,4 +1,26 @@
-# Created by venv; see https://docs.python.org/3/library/venv.html
+# Environment
+.env
+.env.local
 .venv/
-*.env*
-*.pyc
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Node
+node_modules/
+dist/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
