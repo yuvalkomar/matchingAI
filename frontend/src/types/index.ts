@@ -44,6 +44,24 @@ export interface MatchResult {
   heuristic_score: number;
 }
 
+export interface ColumnMapping {
+  available_columns: string[];
+  detected_mapping: Record<string, string | null>;
+  auto_detected: boolean;
+  sample_data: Record<string, string[]>;
+  row_count: number;
+}
+
+export interface FileAnalysisResponse {
+  success: boolean;
+  available_columns: string[];
+  detected_mapping: Record<string, string | null>;
+  auto_detected: boolean;
+  sample_data: Record<string, string[]>;
+  row_count: number;
+  error?: string;
+}
+
 export interface UploadResponse {
   success: boolean;
   message: string;

@@ -61,12 +61,44 @@ This project is being built incrementally. Current status:
 - Set up frontend React + TypeScript + TailwindCSS skeleton
 - Created README with system intent
 
-▶️ **Next Steps**:
-- STEP 2: Define backend data models and CSV import
-- STEP 3: Implement heuristic scoring (with explanation output)
-- STEP 4: Add LLM-based normalization modules
-- STEP 5: Build API endpoints for upload, matching, and report export
-- STEP 6-9: Frontend flows — Import UI, Match Review, Exceptions Dashboard, Audit Export
+✅ **STEP 2** — Backend Data Models and CSV Import (Complete)
+- Defined Pydantic models for transactions and matches
+- Implemented CSV parsing for both ledger and bank statement formats
+- Handles date parsing with multiple format support
+- Transaction type normalization
+
+✅ **STEP 3** — Heuristic Scoring (Complete)
+- Implemented transparent matching heuristics:
+  - Amount matching (with tolerance)
+  - Date proximity scoring
+  - Vendor similarity (RapidFuzz)
+  - Reference matching
+  - Transaction type validation
+- Composite scoring engine with weighted components
+- Explanation generation for all match decisions
+
+✅ **STEP 4** — LLM-Based Normalization (Complete)
+- Vendor name normalization using Google Gemini
+- Description semantic similarity computation
+- Graceful degradation when LLM is not configured
+- JSON-structured LLM outputs for explainability
+
+✅ **STEP 5** — API Endpoints (Complete)
+- `/upload/ledger` - Upload and parse ledger CSV
+- `/upload/bank` - Upload and parse bank CSV
+- `/match` - Run matching algorithm and return candidates
+- `/match/confirm/{ledger_id}/{bank_id}` - Manually confirm a match
+- `/match/reject/{ledger_id}` - Reject a match
+- `/export` - Export reconciliation report as CSV
+- `/status` - Get current reconciliation status
+
+✅ **STEP 6-9** — Frontend Flows (Complete)
+- **Import UI**: Step-by-step file upload with preview
+- **Match Review**: Side-by-side comparison with transparent explanations
+- **Exceptions Dashboard**: View and manage unmatched transactions
+- **Audit Export**: Download reconciliation reports
+
+The application is now fully functional and ready for use!
 
 ## Getting Started
 

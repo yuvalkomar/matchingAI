@@ -59,10 +59,19 @@ class MatchResult(BaseModel):
     heuristic_score: float
 
 
+class ColumnMapping(BaseModel):
+    """Column mapping information."""
+    available_columns: List[str]
+    detected_mapping: Dict[str, Optional[str]]  # category -> column_name
+    auto_detected: bool
+    sample_data: Dict[str, List[str]]  # column_name -> first 3 values
+
+
 class UploadResponse(BaseModel):
     """Response after file upload."""
     success: bool
     message: str
     transaction_count: int
     sample_transactions: List[Transaction]
+    column_mapping: Optional[ColumnMapping] = None
 
