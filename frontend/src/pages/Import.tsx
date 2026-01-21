@@ -30,16 +30,22 @@ const Import = () => {
         timeoutPromise
       ]) as any;
       
-      if (response.success && response.mapping) {
+      console.log(`[AutoMap ${type}] Response:`, response);
+      
+      if (response && response.success && response.mapping) {
+        // Build mapping object, handling both string values and null/undefined
         const mapping: ColumnMappingType = {
-          date: response.mapping.date || null,
-          vendor: response.mapping.vendor || null,
-          description: response.mapping.description || null,
-          money_in: response.mapping.money_in || null,
-          money_out: response.mapping.money_out || null,
-          reference: response.mapping.reference || null,
-          category: response.mapping.category || null,
+          date: (response.mapping.date && typeof response.mapping.date === 'string') ? response.mapping.date : null,
+          vendor: (response.mapping.vendor && typeof response.mapping.vendor === 'string') ? response.mapping.vendor : null,
+          description: (response.mapping.description && typeof response.mapping.description === 'string') ? response.mapping.description : null,
+          money_in: (response.mapping.money_in && typeof response.mapping.money_in === 'string') ? response.mapping.money_in : null,
+          money_out: (response.mapping.money_out && typeof response.mapping.money_out === 'string') ? response.mapping.money_out : null,
+          reference: (response.mapping.reference && typeof response.mapping.reference === 'string') ? response.mapping.reference : null,
+          category: (response.mapping.category && typeof response.mapping.category === 'string') ? response.mapping.category : null,
         };
+        console.log(`[AutoMap ${type}] Applying mapping:`, mapping);
+        
+        // Apply the mapping to both autoMapping (for suggestions) and mapping (for actual values)
         if (type === 'ledger') {
           setLedgerAutoMapping(mapping);
           setLedgerMapping(mapping);
@@ -47,12 +53,12 @@ const Import = () => {
           setBankAutoMapping(mapping);
           setBankMapping(mapping);
         }
-      } else if (response.error) {
-        console.warn(`Auto-mapping ${type} failed:`, response.error);
+      } else {
+        console.warn(`[AutoMap ${type}] Failed - success:`, response?.success, 'mapping:', response?.mapping, 'error:', response?.error);
         // Don't show error to user - they can still manually map
       }
     } catch (error: any) {
-      console.warn('Auto-mapping failed:', error.message || error);
+      console.error(`[AutoMap ${type}] Exception:`, error.message || error);
       // Silently fail - user can still manually map columns
     } finally {
       setIsAutoMapping({ ...isAutoMapping, [type]: false });
@@ -148,9 +154,12 @@ const Import = () => {
         </div>
         <FileUpload
           label="Upload Ledger File"
-          onUploadComplete={(response) => {
+          onUploadComplete={async (response) => {
             setLedgerFile(response);
-            // Don't auto-map automatically - let user click the button if they want
+            // Automatically trigger AI mapping when file is uploaded
+            if (response.file_id) {
+              await handleAutoMap(response.file_id, 'ledger');
+            }
           }}
         />
         {ledgerFile && (
@@ -189,9 +198,12 @@ const Import = () => {
         </div>
         <FileUpload
           label="Upload Bank File"
-          onUploadComplete={(response) => {
+          onUploadComplete={async (response) => {
             setBankFile(response);
-            // Don't auto-map automatically - let user click the button if they want
+            // Automatically trigger AI mapping when file is uploaded
+            if (response.file_id) {
+              await handleAutoMap(response.file_id, 'bank');
+            }
           }}
         />
         {bankFile && (

@@ -1,7 +1,7 @@
 """
 Import routes for file upload and processing.
 """
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 from typing import Dict, Any
 import sys
 import os
@@ -110,7 +110,7 @@ async def upload_file(file: UploadFile = File(...)):
 
 
 @router.post("/auto-map")
-async def auto_map_columns(file_id: str, timeout: int = 10):
+async def auto_map_columns(file_id: str = Query(...), timeout: int = Query(10)):
     """Use AI to automatically map columns."""
     if file_id not in file_storage:
         raise HTTPException(status_code=404, detail="File not found")
