@@ -5,21 +5,13 @@ Uses Google Gemini API. Heuristics find candidates, LLM makes final decision wit
 
 import os
 import json
+import logging
 from typing import Dict, Optional, Tuple, List
 from dotenv import load_dotenv
 import concurrent.futures
 
-# Optional streamlit import (for backward compatibility)
-try:
-    import streamlit as st
-    HAS_STREAMLIT = True
-except ImportError:
-    HAS_STREAMLIT = False
-    # Create a dummy st object for when streamlit is not available
-    class DummyStreamlit:
-        def warning(self, msg):
-            print(f"WARNING: {msg}")
-    st = DummyStreamlit()
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -83,7 +75,7 @@ Normalize this vendor name: {vendor}"""
         
     except Exception as e:
         # Log error but don't fail - return original
-        st.warning(f"LLM vendor normalization failed: {str(e)}")
+        logger.warning(f"LLM vendor normalization failed: {str(e)}")
         return vendor, False
 
 
@@ -136,7 +128,7 @@ Description 2: {desc2}"""
         
     except Exception as e:
         # Log error but don't fail
-        st.warning(f"LLM semantic similarity failed: {str(e)}")
+        logger.warning(f"LLM semantic similarity failed: {str(e)}")
         return 0.0, False
 
 
@@ -201,7 +193,7 @@ Existing explanations: {base_explanations}"""
         return base_explanations, True
         
     except Exception as e:
-        st.warning(f"LLM explanation enhancement failed: {str(e)}")
+        logger.warning(f"LLM explanation enhancement failed: {str(e)}")
         return base_explanations, False
 
 
@@ -273,8 +265,7 @@ Analyze and match:"""
             try:
                 response = future.result(timeout=timeout)
             except concurrent.futures.TimeoutError:
-                if HAS_STREAMLIT:
-                    st.warning(f"⚠️ AI column matching timed out after {timeout} seconds")
+                logger.warning(f"AI column matching timed out after {timeout} seconds")
                 return {}, False
         
         # Extract JSON from response
@@ -299,18 +290,15 @@ Analyze and match:"""
         
     except json.JSONDecodeError as e:
         # JSON parsing failed
-        if HAS_STREAMLIT:
-            st.warning(f"⚠️ AI column matching: Invalid response format")
+        logger.warning("AI column matching: Invalid response format")
         return {}, False
     except concurrent.futures.TimeoutError:
         # Timeout occurred (caught in inner try/except, but also here as backup)
-        if HAS_STREAMLIT:
-            st.warning(f"⚠️ AI column matching timed out after {timeout} seconds")
+        logger.warning(f"AI column matching timed out after {timeout} seconds")
         return {}, False
     except Exception as e:
         # Other errors
-        if HAS_STREAMLIT:
-            st.warning(f"⚠️ AI column matching unavailable: {str(e)}")
+        logger.warning(f"AI column matching unavailable: {str(e)}")
         return {}, False
 
 
