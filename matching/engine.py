@@ -107,6 +107,12 @@ class MatchingEngine:
         Returns:
             (score, explanation)
         """
+        # Handle string dates (ISO format)
+        if isinstance(ledger_date, str):
+            ledger_date = datetime.fromisoformat(ledger_date.replace('Z', '+00:00'))
+        if isinstance(bank_date, str):
+            bank_date = datetime.fromisoformat(bank_date.replace('Z', '+00:00'))
+        
         # Handle pandas Timestamp
         if hasattr(ledger_date, 'to_pydatetime'):
             ledger_date = ledger_date.to_pydatetime()
