@@ -165,10 +165,10 @@ async def export_unmatched_bank():
 async def export_audit_trail():
     """Export audit trail as JSON."""
     from backend.api.routes.matching import match_state_lock
-    
+
     with match_state_lock:
         audit_trail = match_state['audit_trail']
-        
+
         # Ensure matched IDs are sets
         matched_ledger_ids = match_state['matched_ledger_ids']
         matched_bank_ids = match_state['matched_bank_ids']
@@ -178,10 +178,10 @@ async def export_audit_trail():
         if not isinstance(matched_bank_ids, set):
             match_state['matched_bank_ids'] = set(matched_bank_ids) if matched_bank_ids else set()
             matched_bank_ids = match_state['matched_bank_ids']
-        
+
         normalized_ledger = match_state['normalized_ledger']
         normalized_bank = match_state['normalized_bank']
-        
+
         # Calculate all values inside the lock to prevent race conditions
         total_ledger = len(normalized_ledger)
         total_bank = len(normalized_bank)
@@ -191,7 +191,7 @@ async def export_audit_trail():
         skipped_matches = len(match_state['skipped_matches'])
         unmatched_ledger_count = len([t for t in normalized_ledger if t['id'] not in matched_ledger_ids])
         unmatched_bank_count = len([t for t in normalized_bank if t['id'] not in matched_bank_ids])
-    
+
     # Construct export data outside lock using pre-calculated values
     export_data = {
         'export_timestamp': datetime.now().isoformat(),
