@@ -127,16 +127,16 @@ const UploadOrPreview = ({
             </div>
           )}
           <div className="flex items-center justify-between mb-2 gap-2">
-            <h3 className="text-xs font-semibold text-text-primary truncate min-w-0">
+            <h3 className="text-sm font-semibold text-text-primary truncate min-w-0">
               Preview: {file.filename}
             </h3>
             <button
               type="button"
               onClick={handleChooseFile}
               disabled={isUploading || disabled}
-              className="shrink-0 border border-primary-blue text-primary-blue text-xs px-2 py-1 rounded hover:bg-primary-blue hover:text-white transition-colors flex items-center gap-1 disabled:opacity-50"
+              className="shrink-0 w-[120px] h-6 border border-primary-blue text-primary-blue text-xs rounded hover:bg-primary-blue hover:text-white transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
             >
-              <RefreshCw className="w-3 h-3" />
+              <RefreshCw className="w-3 h-3 shrink-0" />
               Replace file
             </button>
           </div>

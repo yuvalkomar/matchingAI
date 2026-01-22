@@ -1,5 +1,5 @@
 import { ColumnMapping as ColumnMappingType } from '../types';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, HelpCircle } from 'lucide-react';
 
 interface ColumnMappingProps {
   columns: string[];
@@ -7,17 +7,27 @@ interface ColumnMappingProps {
   onMappingChange: (mapping: ColumnMappingType) => void;
   autoMapping?: ColumnMappingType | null;
   label: string;
+  onAutoMap?: () => void;
+  isAutoMapping?: boolean;
 }
 
-const ColumnMapping = ({ columns, mapping, onMappingChange, autoMapping, label }: ColumnMappingProps) => {
-  const fields = [
-    { key: 'date' as const, label: 'Date', required: true },
-    { key: 'vendor' as const, label: 'Vendor', required: true },
-    { key: 'description' as const, label: 'Description', required: true },
-    { key: 'money_in' as const, label: 'Money In', required: false },
-    { key: 'money_out' as const, label: 'Money Out', required: false },
-    { key: 'reference' as const, label: 'Reference', required: false },
-    { key: 'category' as const, label: 'Category', required: false },
+const ColumnMapping = ({
+  columns,
+  mapping,
+  onMappingChange,
+  autoMapping,
+  label,
+  onAutoMap,
+  isAutoMapping = false,
+}: ColumnMappingProps) => {
+  const fields: { key: keyof ColumnMappingType; label: string; required: boolean; help: string }[] = [
+    { key: 'date', label: 'Date', required: true, help: 'Transaction date (e.g. when it occurred). Required for matching.' },
+    { key: 'vendor', label: 'Vendor', required: true, help: 'Payee or merchant name. Used to match ledger and bank transactions.' },
+    { key: 'description', label: 'Description', required: true, help: 'Short description of the transaction. Helps verify matches.' },
+    { key: 'money_in', label: 'Money In', required: false, help: 'Deposits, credits, or income. At least one of Money In or Money Out is required.' },
+    { key: 'money_out', label: 'Money Out', required: false, help: 'Withdrawals, debits, or expenses. At least one of Money In or Money Out is required.' },
+    { key: 'reference', label: 'Reference', required: false, help: 'Optional: check number, transaction ID, or reference code.' },
+    { key: 'category', label: 'Category', required: false, help: 'Optional: category or account code.' },
   ];
 
   const handleChange = (key: keyof ColumnMappingType, value: string) => {
@@ -33,14 +43,27 @@ const ColumnMapping = ({ columns, mapping, onMappingChange, autoMapping, label }
 
   return (
     <div className="card p-4 h-full flex flex-col">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-3 gap-2">
         <h3 className="text-sm font-semibold text-text-primary">{label}</h3>
-        {autoMapping && (
-          <span className="flex items-center text-xs text-text-secondary">
-            <Sparkles className="w-3 h-3 mr-1 text-primary-gold" />
-            AI suggestions applied
-          </span>
-        )}
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
+          {onAutoMap && (
+            <button
+              type="button"
+              onClick={onAutoMap}
+              disabled={isAutoMapping}
+              className="shrink-0 w-[120px] h-6 border border-primary-blue text-primary-blue text-xs rounded hover:bg-primary-blue hover:text-white transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+            >
+              <Sparkles className="w-3 h-3 shrink-0" />
+              {isAutoMapping ? 'Analyzing...' : 'AI Auto-Map'}
+            </button>
+          )}
+          {autoMapping && !isAutoMapping && (
+            <span className="flex items-center text-xs text-primary-gold">
+              <Sparkles className="w-3 h-3 mr-1" />
+              AI suggestions applied
+            </span>
+          )}
+        </div>
       </div>
       
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 flex-1">
@@ -48,10 +71,27 @@ const ColumnMapping = ({ columns, mapping, onMappingChange, autoMapping, label }
           const suggested = getAutoSuggestion(field.key);
           return (
             <div key={field.key} className="min-w-0">
-              <label className="block text-xs font-medium text-text-primary mb-1">
-                {field.label}
-                {field.required && <span className="text-red-500 ml-1">*</span>}
-              </label>
+              <div className="flex items-center gap-1 mb-1">
+                <label className="text-xs font-medium text-text-primary">
+                  {field.label}
+                  {field.required && <span className="text-red-500 ml-1">*</span>}
+                </label>
+                <span className="group relative inline-flex">
+                  <button
+                    type="button"
+                    aria-label={`Help: ${field.label}`}
+                    className="p-0.5 rounded text-gray-400 hover:text-primary-blue hover:bg-blue-100 transition-colors focus:outline-none focus:ring-1 focus:ring-primary-blue focus:ring-offset-1"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5" />
+                  </button>
+                  <span
+                    role="tooltip"
+                    className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 w-48 px-2.5 py-2 text-xs font-normal text-white bg-gray-800 rounded shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-opacity z-20 pointer-events-none"
+                  >
+                    {field.help}
+                  </span>
+                </span>
+              </div>
               <select
                 value={mapping[field.key] || ''}
                 onChange={(e) => handleChange(field.key, e.target.value)}

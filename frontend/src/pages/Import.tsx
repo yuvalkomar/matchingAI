@@ -4,7 +4,7 @@ import UploadOrPreview from '../components/UploadOrPreview';
 import ColumnMapping from '../components/ColumnMapping';
 import { FileUploadResponse, ColumnMapping as ColumnMappingType } from '../types';
 import { autoMapColumns, processFiles, setTransactions, runMatching } from '../services/api';
-import { Sparkles, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 const Import = () => {
   const navigate = useNavigate();
@@ -118,7 +118,7 @@ const Import = () => {
   const canProcess = ledgerFile && bankFile && validateMapping(ledgerMapping) && validateMapping(bankMapping);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-100 via-sky-50 to-slate-200">
+    <div className="min-h-screen bg-blue-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div className="mb-4">
           <h1 className="text-2xl font-bold text-text-primary mb-1">Import Data</h1>
@@ -130,19 +130,7 @@ const Import = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         {/* Ledger Section */}
         <div className="rounded-lg border-2 border-blue-200 bg-blue-50/90 shadow-md p-4 flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-text-primary">📄 Company Ledger</h2>
-            {ledgerFile && (
-              <button
-                onClick={() => handleAutoMap(ledgerFile.file_id, 'ledger')}
-                disabled={isAutoMapping.ledger}
-                className="shrink-0 border border-primary-blue text-primary-blue text-xs px-2 py-1 rounded hover:bg-primary-blue hover:text-white transition-colors flex items-center gap-1 disabled:opacity-50"
-              >
-                <Sparkles className="w-3 h-3" />
-                {isAutoMapping.ledger ? 'Analyzing...' : 'AI Auto-Map'}
-              </button>
-            )}
-          </div>
+          <h2 className="text-lg font-semibold text-text-primary">📄 Company Ledger</h2>
           <UploadOrPreview
             label="Company Ledger"
             file={ledgerFile}
@@ -154,41 +142,21 @@ const Import = () => {
             }}
           />
           {ledgerFile && (
-            <>
-              {isAutoMapping.ledger && (
-                <div className="text-xs text-primary-gold flex items-center">
-                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary-gold mr-2" />
-                  AI is analyzing columns...
-                </div>
-              )}
-              <div className="border-t border-gray-200 pt-3">
-                <ColumnMapping
-                  columns={ledgerFile.columns}
-                  mapping={ledgerMapping}
-                  onMappingChange={setLedgerMapping}
-                  autoMapping={ledgerAutoMapping}
-                  label="Map Ledger Columns"
-                />
-              </div>
-            </>
+            <ColumnMapping
+              columns={ledgerFile.columns}
+              mapping={ledgerMapping}
+              onMappingChange={setLedgerMapping}
+              autoMapping={ledgerAutoMapping}
+              label="Map Ledger Columns"
+              onAutoMap={() => handleAutoMap(ledgerFile.file_id, 'ledger')}
+              isAutoMapping={isAutoMapping.ledger}
+            />
           )}
         </div>
 
         {/* Bank Section */}
         <div className="rounded-lg border-2 border-blue-200 bg-blue-50/90 shadow-md p-4 flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-text-primary">🏦 Bank Transactions</h2>
-            {bankFile && (
-              <button
-                onClick={() => handleAutoMap(bankFile.file_id, 'bank')}
-                disabled={isAutoMapping.bank}
-                className="shrink-0 border border-primary-blue text-primary-blue text-xs px-2 py-1 rounded hover:bg-primary-blue hover:text-white transition-colors flex items-center gap-1 disabled:opacity-50"
-              >
-                <Sparkles className="w-3 h-3" />
-                {isAutoMapping.bank ? 'Analyzing...' : 'AI Auto-Map'}
-              </button>
-            )}
-          </div>
+          <h2 className="text-lg font-semibold text-text-primary">🏦 Bank Transactions</h2>
           <UploadOrPreview
             label="Bank Transactions"
             file={bankFile}
@@ -200,23 +168,15 @@ const Import = () => {
             }}
           />
           {bankFile && (
-            <>
-              {isAutoMapping.bank && (
-                <div className="text-xs text-primary-gold flex items-center">
-                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary-gold mr-2" />
-                  AI is analyzing columns...
-                </div>
-              )}
-              <div className="border-t border-gray-200 pt-3">
-                <ColumnMapping
-                  columns={bankFile.columns}
-                  mapping={bankMapping}
-                  onMappingChange={setBankMapping}
-                  autoMapping={bankAutoMapping}
-                  label="Map Bank Columns"
-                />
-              </div>
-            </>
+            <ColumnMapping
+              columns={bankFile.columns}
+              mapping={bankMapping}
+              onMappingChange={setBankMapping}
+              autoMapping={bankAutoMapping}
+              label="Map Bank Columns"
+              onAutoMap={() => handleAutoMap(bankFile.file_id, 'bank')}
+              isAutoMapping={isAutoMapping.bank}
+            />
           )}
         </div>
         </div>
