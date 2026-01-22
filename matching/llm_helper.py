@@ -375,7 +375,7 @@ Return ONLY a JSON object:
 {{
     "selected_candidate": 1,  // 1-based index, or null if no match
     "confidence": 0.85,  // 0.0 to 1.0
-    "explanation": "Clear explanation in 1-2 sentences why this is (or isn't) a match. Mention specific details that support your decision.",
+    "explanation": "Clear explanation in 1-2 sentences why this is (or isn't) a match. Mention specific details that support your decision. IMPORTANT: Do NOT mention 'candidate 1', 'candidate 2', or any candidate numbers. Write as if you are simply explaining why the matched bank transaction corresponds to the ledger entry based on their attributes (amount, date, vendor, etc.).",
     "reasoning": {{
         "amount_match": "exact/close/different",
         "date_match": "same day/within window/outside window", 
