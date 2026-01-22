@@ -4,7 +4,7 @@ import TransactionCard from '../components/TransactionCard';
 import MatchCard from '../components/MatchCard';
 import { getNextMatch, submitMatchAction, runMatching, getStats } from '../services/api';
 import { MatchResult, MatchingConfig } from '../types';
-import { ArrowLeft, ArrowRight, CheckCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle } from 'lucide-react';
 
 const Review = () => {
   const navigate = useNavigate();

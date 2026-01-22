@@ -1,6 +1,11 @@
+/**
+ * Standalone file upload (dashed drop zone). Prefer UploadOrPreview on the Import
+ * screen, which unifies upload + preview and supports replace / drop-on-preview.
+ */
 import { useState, useRef } from 'react';
 import { Upload, FileText, X } from 'lucide-react';
-import { uploadFile, FileUploadResponse } from '../services/api';
+import { uploadFile } from '../services/api';
+import type { FileUploadResponse } from '../types';
 
 interface FileUploadProps {
   label: string;
@@ -88,7 +93,7 @@ const FileUpload = ({ label, onUploadComplete, accept = '.csv,.xlsx,.xls', disab
         onDragLeave={() => setIsDragging(false)}
         onClick={handleClick}
         className={`
-          relative border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all
+          relative border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-all
           ${isDragging ? 'border-primary-blue bg-blue-50' : 'border-gray-300 hover:border-primary-blue hover:bg-gray-50'}
           ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
           ${uploadedFile ? 'border-green-500 bg-green-50' : ''}
@@ -105,30 +110,30 @@ const FileUpload = ({ label, onUploadComplete, accept = '.csv,.xlsx,.xls', disab
         
         {isUploading ? (
           <div className="flex flex-col items-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-blue mb-2"></div>
-            <p className="text-sm text-text-secondary">Uploading...</p>
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-blue mb-2"></div>
+            <p className="text-xs text-text-secondary">Uploading...</p>
           </div>
         ) : uploadedFile ? (
           <div className="flex flex-col items-center">
             <div className="relative">
-              <FileText className="w-12 h-12 text-green-600 mb-2" />
+              <FileText className="w-8 h-8 text-green-600 mb-1" />
               <button
                 onClick={handleRemove}
-                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3 h-3" />
               </button>
             </div>
-            <p className="text-sm font-medium text-text-primary">{uploadedFile.filename}</p>
-            <p className="text-xs text-text-secondary mt-1">{uploadedFile.row_count} rows</p>
+            <p className="text-xs font-medium text-text-primary">{uploadedFile.filename}</p>
+            <p className="text-xs text-text-secondary mt-0.5">{uploadedFile.row_count} rows</p>
           </div>
         ) : (
           <div className="flex flex-col items-center">
-            <Upload className="w-12 h-12 text-text-secondary mb-2" />
-            <p className="text-sm font-medium text-text-primary">
+            <Upload className="w-8 h-8 text-text-secondary mb-1" />
+            <p className="text-xs font-medium text-text-primary">
               Click to upload or drag and drop
             </p>
-            <p className="text-xs text-text-secondary mt-1">CSV or Excel files</p>
+            <p className="text-xs text-text-secondary mt-0.5">CSV or Excel files</p>
           </div>
         )}
       </div>

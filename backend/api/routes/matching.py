@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Any, Optional
 import sys
 import os
+import threading
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
 
@@ -18,6 +19,7 @@ from matching.llm_helper import evaluate_match_batch
 router = APIRouter(prefix="/api/match", tags=["matching"])
 
 # In-memory state (in production, use database)
+# Thread-safe state with lock
 match_state: Dict[str, Any] = {
     'normalized_ledger': [],
     'normalized_bank': [],
@@ -31,15 +33,17 @@ match_state: Dict[str, Any] = {
     'matched_ledger_ids': set(),
     'audit_trail': [],
 }
+match_state_lock = threading.Lock()
 
 
 @router.post("/run")
 async def run_matching(request: RunMatchingRequest):
     """Run matching algorithm on normalized transactions."""
     try:
-        # Get transactions from state
-        ledger_txns = match_state['normalized_ledger']
-        bank_txns = match_state['normalized_bank']
+        with match_state_lock:
+            # Get transactions from state
+            ledger_txns = match_state['normalized_ledger']
+            bank_txns = match_state['normalized_bank']
         
         if not ledger_txns or not bank_txns:
             raise HTTPException(status_code=400, detail="No transactions loaded. Please import files first.")
@@ -55,11 +59,17 @@ async def run_matching(request: RunMatchingRequest):
         results = evaluate_match_batch(ledger_txns, bank_txns, engine)
         
         # Convert to response format
+        # Ensure all required Transaction fields are preserved (source, original_row)
         match_results = []
         for r in results:
+            ledger_txn = r['ledger_txn'].copy()  # Preserve all fields including source and original_row
+            bank_txn = r.get('bank_txn')
+            if bank_txn:
+                bank_txn = bank_txn.copy()  # Preserve all fields including source and original_row
+            
             match_results.append({
-                'ledger_txn': r['ledger_txn'],
-                'bank_txn': r.get('bank_txn'),
+                'ledger_txn': ledger_txn,
+                'bank_txn': bank_txn,
                 'confidence': r.get('confidence', 0.0),
                 'heuristic_score': r.get('heuristic_score', 0.0),
                 'llm_explanation': r.get('llm_explanation', ''),
@@ -67,9 +77,10 @@ async def run_matching(request: RunMatchingRequest):
                 'candidates': [c.__dict__ if hasattr(c, '__dict__') else c for c in r.get('candidates', [])],
             })
         
-        # Update state
-        match_state['match_results'] = match_results
-        match_state['current_index'] = 0
+        # Update state with thread-safe access
+        with match_state_lock:
+            match_state['match_results'] = match_results
+            match_state['current_index'] = 0
         
         return {
             "total_matches": len(match_results),
@@ -83,8 +94,9 @@ async def run_matching(request: RunMatchingRequest):
 @router.get("/next")
 async def get_next_match():
     """Get next match to review."""
-    results = match_state['match_results']
-    current_idx = match_state['current_index']
+    with match_state_lock:
+        results = match_state['match_results']
+        current_idx = match_state['current_index']
     
     if current_idx >= len(results):
         return {
@@ -106,82 +118,83 @@ async def submit_match_action(action: MatchAction):
     """Submit an action on a match (accept, reject, skip, etc.)."""
     from datetime import datetime
     
-    results = match_state['match_results']
-    current_idx = match_state['current_index']
-    
-    if current_idx >= len(results):
-        raise HTTPException(status_code=400, detail="No more matches to review")
-    
-    result = results[current_idx]
-    timestamp = datetime.now().isoformat()
-    
-    # Record in audit trail
-    audit_entry = {
-        'timestamp': timestamp,
-        'action': action.action,
-        'ledger_id': result['ledger_txn']['id'],
-        'bank_id': result.get('bank_txn', {}).get('id') if result.get('bank_txn') else None,
-        'ledger_vendor': result['ledger_txn']['vendor'],
-        'bank_vendor': result.get('bank_txn', {}).get('vendor') if result.get('bank_txn') else None,
-        'ledger_amount': result['ledger_txn']['amount'],
-        'bank_amount': result.get('bank_txn', {}).get('amount') if result.get('bank_txn') else None,
-        'confidence': result.get('confidence', 0.0),
-        'heuristic_score': result.get('heuristic_score', 0.0),
-        'llm_explanation': result.get('llm_explanation', ''),
-        'notes': action.notes or '',
-        'matching_config': {},
-    }
-    
-    match_state['audit_trail'].append(audit_entry)
-    
-    # Update appropriate list
-    if action.action == 'match' and result.get('bank_txn'):
-        match_state['confirmed_matches'].append({
-            'ledger_txn': result['ledger_txn'],
-            'bank_txn': result['bank_txn'],
+    with match_state_lock:
+        results = match_state['match_results']
+        current_idx = match_state['current_index']
+        
+        if current_idx >= len(results):
+            raise HTTPException(status_code=400, detail="No more matches to review")
+        
+        result = results[current_idx]
+        timestamp = datetime.now().isoformat()
+        
+        # Record in audit trail
+        audit_entry = {
+            'timestamp': timestamp,
+            'action': action.action,
+            'ledger_id': result['ledger_txn']['id'],
+            'bank_id': result.get('bank_txn', {}).get('id') if result.get('bank_txn') else None,
+            'ledger_vendor': result['ledger_txn']['vendor'],
+            'bank_vendor': result.get('bank_txn', {}).get('vendor') if result.get('bank_txn') else None,
+            'ledger_amount': result['ledger_txn']['amount'],
+            'bank_amount': result.get('bank_txn', {}).get('amount') if result.get('bank_txn') else None,
             'confidence': result.get('confidence', 0.0),
             'heuristic_score': result.get('heuristic_score', 0.0),
             'llm_explanation': result.get('llm_explanation', ''),
-            'timestamp': timestamp,
-        })
-        if isinstance(match_state['matched_bank_ids'], set):
-            match_state['matched_bank_ids'].add(result['bank_txn']['id'])
-        else:
-            match_state['matched_bank_ids'] = set(match_state['matched_bank_ids'])
-            match_state['matched_bank_ids'].add(result['bank_txn']['id'])
+            'notes': action.notes or '',
+            'matching_config': {},
+        }
         
-        if isinstance(match_state['matched_ledger_ids'], set):
+        match_state['audit_trail'].append(audit_entry)
+        
+        # Update appropriate list - ensure sets remain sets
+        if action.action == 'match' and result.get('bank_txn'):
+            match_state['confirmed_matches'].append({
+                'ledger_txn': result['ledger_txn'],
+                'bank_txn': result['bank_txn'],
+                'confidence': result.get('confidence', 0.0),
+                'heuristic_score': result.get('heuristic_score', 0.0),
+                'llm_explanation': result.get('llm_explanation', ''),
+                'timestamp': timestamp,
+            })
+            # Ensure matched_bank_ids is always a set
+            if not isinstance(match_state['matched_bank_ids'], set):
+                match_state['matched_bank_ids'] = set(match_state['matched_bank_ids'])
+            match_state['matched_bank_ids'].add(result['bank_txn']['id'])
+            
+            # Ensure matched_ledger_ids is always a set
+            if not isinstance(match_state['matched_ledger_ids'], set):
+                match_state['matched_ledger_ids'] = set(match_state['matched_ledger_ids'])
             match_state['matched_ledger_ids'].add(result['ledger_txn']['id'])
-        else:
-            match_state['matched_ledger_ids'] = set(match_state['matched_ledger_ids'])
-            match_state['matched_ledger_ids'].add(result['ledger_txn']['id'])
-    elif action.action == 'reject':
-        match_state['rejected_matches'].append({
-            'ledger_txn': result['ledger_txn'],
-            'bank_txn': result.get('bank_txn'),
-            'timestamp': timestamp,
-        })
-    elif action.action == 'duplicate':
-        match_state['flagged_duplicates'].append({
-            'ledger_txn': result['ledger_txn'],
-            'bank_txn': result.get('bank_txn'),
-            'timestamp': timestamp,
-        })
-    elif action.action == 'skip':
-        match_state['skipped_matches'].append({
-            'ledger_txn': result['ledger_txn'],
-            'bank_txn': result.get('bank_txn'),
-            'timestamp': timestamp,
-        })
-    
-    # Move to next match
-    match_state['current_index'] += 1
+        elif action.action == 'reject':
+            match_state['rejected_matches'].append({
+                'ledger_txn': result['ledger_txn'],
+                'bank_txn': result.get('bank_txn'),
+                'timestamp': timestamp,
+            })
+        elif action.action == 'duplicate':
+            match_state['flagged_duplicates'].append({
+                'ledger_txn': result['ledger_txn'],
+                'bank_txn': result.get('bank_txn'),
+                'timestamp': timestamp,
+            })
+        elif action.action == 'skip':
+            match_state['skipped_matches'].append({
+                'ledger_txn': result['ledger_txn'],
+                'bank_txn': result.get('bank_txn'),
+                'timestamp': timestamp,
+            })
+        
+        # Move to next match
+        next_index = match_state['current_index'] + 1
+        match_state['current_index'] = next_index
+        total = len(results)
     
     return {
         "success": True,
         "action": action.action,
-        "next_index": match_state['current_index'],
-        "total": len(results),
+        "next_index": next_index,
+        "total": total,
     }
 
 
@@ -190,30 +203,34 @@ async def set_transactions(request: Dict[str, Any]):
     """Set normalized transactions (called after import processing)."""
     ledger = request.get('ledger', [])
     bank = request.get('bank', [])
-    match_state['normalized_ledger'] = ledger
-    match_state['normalized_bank'] = bank
-    # Reset match state
-    match_state['match_results'] = []
-    match_state['current_index'] = 0
-    match_state['confirmed_matches'] = []
-    match_state['rejected_matches'] = []
-    match_state['flagged_duplicates'] = []
-    match_state['skipped_matches'] = []
-    match_state['matched_bank_ids'] = set()
-    match_state['matched_ledger_ids'] = set()
-    match_state['audit_trail'] = []
+    
+    with match_state_lock:
+        match_state['normalized_ledger'] = ledger
+        match_state['normalized_bank'] = bank
+        # Reset match state - ensure sets are always sets
+        match_state['match_results'] = []
+        match_state['current_index'] = 0
+        match_state['confirmed_matches'] = []
+        match_state['rejected_matches'] = []
+        match_state['flagged_duplicates'] = []
+        match_state['skipped_matches'] = []
+        match_state['matched_bank_ids'] = set()
+        match_state['matched_ledger_ids'] = set()
+        match_state['audit_trail'] = []
+    
     return {"success": True, "ledger_count": len(ledger), "bank_count": len(bank)}
 
 
 @router.get("/stats")
 async def get_stats():
     """Get matching statistics."""
-    return {
-        "confirmed": len(match_state['confirmed_matches']),
-        "rejected": len(match_state['rejected_matches']),
-        "duplicates": len(match_state['flagged_duplicates']),
-        "skipped": len(match_state['skipped_matches']),
-        "pending": len(match_state['match_results']) - match_state['current_index'],
-        "total_ledger": len(match_state['normalized_ledger']),
-        "total_bank": len(match_state['normalized_bank']),
-    }
+    with match_state_lock:
+        return {
+            "confirmed": len(match_state['confirmed_matches']),
+            "rejected": len(match_state['rejected_matches']),
+            "duplicates": len(match_state['flagged_duplicates']),
+            "skipped": len(match_state['skipped_matches']),
+            "pending": len(match_state['match_results']) - match_state['current_index'],
+            "total_ledger": len(match_state['normalized_ledger']),
+            "total_bank": len(match_state['normalized_bank']),
+        }

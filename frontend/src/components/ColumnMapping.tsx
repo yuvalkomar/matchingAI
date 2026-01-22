@@ -32,30 +32,30 @@ const ColumnMapping = ({ columns, mapping, onMappingChange, autoMapping, label }
   };
 
   return (
-    <div className="card">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-text-primary">{label}</h3>
+    <div className="card p-4 h-full flex flex-col">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-text-primary">{label}</h3>
         {autoMapping && (
           <span className="flex items-center text-xs text-text-secondary">
-            <Sparkles className="w-4 h-4 mr-1 text-primary-gold" />
+            <Sparkles className="w-3 h-3 mr-1 text-primary-gold" />
             AI suggestions applied
           </span>
         )}
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 flex-1">
         {fields.map((field) => {
           const suggested = getAutoSuggestion(field.key);
           return (
-            <div key={field.key}>
-              <label className="block text-sm font-medium text-text-primary mb-1">
+            <div key={field.key} className="min-w-0">
+              <label className="block text-xs font-medium text-text-primary mb-1">
                 {field.label}
                 {field.required && <span className="text-red-500 ml-1">*</span>}
               </label>
               <select
                 value={mapping[field.key] || ''}
                 onChange={(e) => handleChange(field.key, e.target.value)}
-                className="input-field"
+                className="input-field text-xs py-1.5 w-full max-w-full"
               >
                 <option value="">-- Select column --</option>
                 {columns.map((col) => (
@@ -66,19 +66,13 @@ const ColumnMapping = ({ columns, mapping, onMappingChange, autoMapping, label }
                 ))}
               </select>
               {suggested && !mapping[field.key] && (
-                <p className="text-xs text-primary-gold mt-1">
+                <p className="text-xs text-primary-gold mt-0.5">
                   AI suggests: {suggested}
                 </p>
               )}
             </div>
           );
         })}
-      </div>
-      
-      <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-        <p className="text-xs text-text-secondary">
-          <strong>Note:</strong> You need to map at least Date, Vendor, Description, and either Money In or Money Out.
-        </p>
       </div>
     </div>
   );
