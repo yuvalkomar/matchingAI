@@ -8,6 +8,7 @@ interface MatchReviewModalProps {
   onAction: (action: 'match' | 'reject' | 'duplicate' | 'skip') => void;
   onClose: () => void;
   isSubmitting?: boolean;
+  readOnly?: boolean;
 }
 
 const MatchReviewModal = ({ 
@@ -16,7 +17,8 @@ const MatchReviewModal = ({
   total, 
   onAction, 
   onClose,
-  isSubmitting = false 
+  isSubmitting = false,
+  readOnly = false,
 }: MatchReviewModalProps) => {
   const formatDate = (dateStr: string) => {
     try {
@@ -46,10 +48,14 @@ const MatchReviewModal = ({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-blue-300/50 bg-gradient-to-r from-primary-blue/10 to-blue-100/50">
           <div>
-            <h2 className="text-xl font-bold bg-gradient-to-r from-primary-blue to-blue-600 bg-clip-text text-transparent">Review Match</h2>
-            <p className="text-sm text-text-secondary">
-              {matchIndex + 1} of {total}
-            </p>
+            <h2 className="text-xl font-bold bg-gradient-to-r from-primary-blue to-blue-600 bg-clip-text text-transparent">
+              {readOnly ? 'Approved Match' : 'Review Match'}
+            </h2>
+            {!readOnly && (
+              <p className="text-sm text-text-secondary">
+                {matchIndex + 1} of {total}
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -165,40 +171,42 @@ const MatchReviewModal = ({
         </div>
 
         {/* Actions Footer */}
-        <div className="px-6 py-4 border-t border-blue-300/50 bg-gradient-to-r from-primary-blue/10 to-blue-100/50 flex flex-wrap gap-3 justify-center">
-          <button
-            onClick={() => onAction('match')}
-            disabled={isSubmitting || !match.bank_txn}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-gold to-yellow-500 text-primary-blue rounded-xl hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-lg transition-all duration-300 font-bold text-sm shadow-lg"
-          >
-            <Check className="w-4 h-4" />
-            Accept
-          </button>
-          <button
-            onClick={() => onAction('reject')}
-            disabled={isSubmitting}
-            className="flex items-center gap-2 px-5 py-2.5 border border-red-300 text-red-600 rounded-xl hover:bg-red-50 disabled:opacity-50 transition-colors font-medium text-sm"
-          >
-            <XCircle className="w-4 h-4" />
-            Reject
-          </button>
-          <button
-            onClick={() => onAction('duplicate')}
-            disabled={isSubmitting}
-            className="flex items-center gap-2 px-5 py-2.5 border border-blue-300 text-primary-blue rounded-xl hover:bg-blue-50 disabled:opacity-50 transition-colors font-medium text-sm"
-          >
-            <Copy className="w-4 h-4" />
-            Duplicate
-          </button>
-          <button
-            onClick={() => onAction('skip')}
-            disabled={isSubmitting}
-            className="flex items-center gap-2 px-5 py-2.5 border border-blue-300 text-text-secondary rounded-xl hover:bg-blue-50 disabled:opacity-50 transition-colors font-medium text-sm"
-          >
-            <SkipForward className="w-4 h-4" />
-            Skip
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="px-6 py-4 border-t border-blue-300/50 bg-gradient-to-r from-primary-blue/10 to-blue-100/50 flex flex-wrap gap-3 justify-center">
+            <button
+              onClick={() => onAction('match')}
+              disabled={isSubmitting || !match.bank_txn}
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-gold to-yellow-500 text-primary-blue rounded-xl hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-lg transition-all duration-300 font-bold text-sm shadow-lg"
+            >
+              <Check className="w-4 h-4" />
+              Accept
+            </button>
+            <button
+              onClick={() => onAction('reject')}
+              disabled={isSubmitting}
+              className="flex items-center gap-2 px-5 py-2.5 border border-red-300 text-red-600 rounded-xl hover:bg-red-50 disabled:opacity-50 transition-colors font-medium text-sm"
+            >
+              <XCircle className="w-4 h-4" />
+              Reject
+            </button>
+            <button
+              onClick={() => onAction('duplicate')}
+              disabled={isSubmitting}
+              className="flex items-center gap-2 px-5 py-2.5 border border-blue-300 text-primary-blue rounded-xl hover:bg-blue-50 disabled:opacity-50 transition-colors font-medium text-sm"
+            >
+              <Copy className="w-4 h-4" />
+              Duplicate
+            </button>
+            <button
+              onClick={() => onAction('skip')}
+              disabled={isSubmitting}
+              className="flex items-center gap-2 px-5 py-2.5 border border-blue-300 text-text-secondary rounded-xl hover:bg-blue-50 disabled:opacity-50 transition-colors font-medium text-sm"
+            >
+              <SkipForward className="w-4 h-4" />
+              Skip
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -11,7 +11,7 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
 
 from backend.api.models import (
-    RunMatchingRequest, MatchResult, MatchAction, 
+    RunMatchingRequest, MatchResult, MatchAction, SeekRequest,
     Transaction, MatchingConfig
 )
 from matching.engine import MatchingEngine
@@ -196,8 +196,19 @@ async def run_matching_async_endpoint(request: RunMatchingRequest):
                 "progress": match_state['matching_progress'],
                 "total": match_state['matching_total'],
             }
+        
+        # Set matching_in_progress BEFORE starting thread to prevent race condition
+        match_state['matching_in_progress'] = True
+        match_state['matching_paused'] = False
+        match_state['matching_progress'] = 0
+        match_state['matching_total'] = len(ledger_txns)
+        match_state['matching_error'] = None
+        # Reset results
+        match_state['match_results'] = []
+        match_state['unmatched_results'] = []
+        match_state['current_index'] = 0
     
-    # Start background thread
+    # Start background thread (lock released, but matching_in_progress is already True)
     thread = threading.Thread(target=run_matching_async, args=(request.config,))
     thread.daemon = True
     thread.start()
@@ -310,6 +321,31 @@ async def run_matching(request: RunMatchingRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/pending")
+async def get_pending_matches():
+    """Get all pending (not yet reviewed) matches with their indices. Order = suggestion order (ascending)."""
+    with match_state_lock:
+        results = match_state['match_results']
+        current_idx = match_state['current_index']
+    pending = [
+        {"index": i, "match": results[i]}
+        for i in range(current_idx, len(results))
+    ]
+    return {"matches": pending, "start_index": current_idx}
+
+
+@router.post("/seek")
+async def seek_to_match(request: SeekRequest):
+    """Set current review index so next get_next_match returns that match. Used for click-to-review."""
+    index = request.index
+    with match_state_lock:
+        results = match_state['match_results']
+        if index < 0 or index >= len(results):
+            raise HTTPException(status_code=400, detail="Invalid match index")
+        match_state['current_index'] = index
+    return {"status": "ok", "index": index}
 
 
 @router.get("/next")

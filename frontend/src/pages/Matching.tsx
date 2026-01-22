@@ -6,6 +6,8 @@ import {
   getUnmatchedBank, 
   getConfirmedMatches,
   getNextMatch,
+  getPendingMatches,
+  seekToMatchIndex,
   submitMatchAction,
   runMatchingAsync,
   getMatchingProgress,
@@ -18,18 +20,18 @@ import {
 } from '../services/api';
 import { Transaction, MatchResult, MatchingConfig } from '../types';
 import MatchReviewModal from '../components/MatchReviewModal';
+import { CountBadge } from '../components/CountBadge';
 import { 
   Download, 
   RefreshCw, 
   CheckCircle2, 
-  AlertCircle, 
   ArrowLeftRight,
-  FileText,
   Settings,
   Eye,
   Loader2,
   Pause,
-  Play
+  Play,
+  Check
 } from 'lucide-react';
 
 interface ConfirmedMatch {
@@ -63,7 +65,7 @@ const Matching = () => {
   
   // Matching progress state
   const [matchingProgress, setMatchingProgress] = useState<MatchingProgress | null>(null);
-  const [pendingMatches, setPendingMatches] = useState<MatchResult[]>([]);
+  const [pendingMatchesList, setPendingMatchesList] = useState<{ index: number; match: MatchResult }[]>([]);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   // Review modal state
@@ -72,6 +74,7 @@ const Matching = () => {
   const [matchIndex, setMatchIndex] = useState(0);
   const [totalPending, setTotalPending] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [reviewReadOnly, setReviewReadOnly] = useState(false);
   
   // Settings panel state
   const [showSettings, setShowSettings] = useState(false);
@@ -86,16 +89,21 @@ const Matching = () => {
   const [isRerunning, setIsRerunning] = useState(false);
 
   // Poll for matching progress
+  const fetchPending = useCallback(async () => {
+    try {
+      const { matches } = await getPendingMatches();
+      setPendingMatchesList(matches);
+    } catch {
+      setPendingMatchesList([]);
+    }
+  }, []);
+
   const pollProgress = useCallback(async () => {
     try {
       const progress = await getMatchingProgress();
       setMatchingProgress(progress);
+      await fetchPending();
       
-      if (progress.latest_matches) {
-        setPendingMatches(progress.latest_matches);
-      }
-      
-      // If matching is complete, load full data
       if (!progress.in_progress && progress.total > 0) {
         if (pollingRef.current) {
           clearInterval(pollingRef.current);
@@ -106,15 +114,16 @@ const Matching = () => {
     } catch (error) {
       console.error('Failed to poll progress:', error);
     }
-  }, []);
+  }, [fetchPending]);
 
   const loadAllData = useCallback(async () => {
     try {
-      const [statsData, ledgerData, bankData, matchesData] = await Promise.all([
+      const [statsData, ledgerData, bankData, matchesData, pendingData] = await Promise.all([
         getStats(),
         getUnmatchedLedger(),
         getUnmatchedBank(),
         getConfirmedMatches(),
+        getPendingMatches().catch(() => ({ matches: [] })),
       ]);
       
       setStats(statsData);
@@ -122,6 +131,7 @@ const Matching = () => {
       setUnmatchedBank(bankData.transactions);
       setConfirmedMatches(matchesData.matches);
       setTotalPending(statsData.pending);
+      setPendingMatchesList(pendingData.matches);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
@@ -150,6 +160,7 @@ const Matching = () => {
         return;
       }
       if ('match' in response) {
+        setReviewReadOnly(false);
         setCurrentMatch(response.match);
         setMatchIndex(response.match_index);
         setTotalPending(response.total);
@@ -161,6 +172,40 @@ const Matching = () => {
       } else {
         console.error('Failed to get next match:', error);
       }
+    }
+  };
+
+  const handleOpenReviewForMatch = async (index: number, isApproved: boolean, approvedMatch?: ConfirmedMatch) => {
+    if (isApproved && approvedMatch) {
+      const asMatchResult: MatchResult = {
+        ledger_txn: approvedMatch.ledger_txn,
+        bank_txn: approvedMatch.bank_txn,
+        confidence: approvedMatch.confidence,
+        heuristic_score: approvedMatch.heuristic_score,
+        llm_explanation: approvedMatch.llm_explanation,
+        component_scores: {},
+        candidates: [],
+      };
+      setReviewReadOnly(true);
+      setCurrentMatch(asMatchResult);
+      setMatchIndex(0);
+      setTotalPending(1);
+      setShowReviewModal(true);
+      return;
+    }
+    try {
+      await seekToMatchIndex(index);
+      const response = await getNextMatch();
+      if ('done' in response && response.done) return;
+      if ('match' in response) {
+        setReviewReadOnly(false);
+        setCurrentMatch(response.match);
+        setMatchIndex(response.match_index);
+        setTotalPending(response.total);
+        setShowReviewModal(true);
+      }
+    } catch (e) {
+      console.error('Failed to open review:', e);
     }
   };
 
@@ -311,191 +356,162 @@ const Matching = () => {
     ? Math.round((matchingProgress.progress / matchingProgress.total) * 100) 
     : 0;
 
+  const approvedCount = confirmedMatches.length;
+  const suggestedCount = isMatchingInProgress
+    ? pendingMatchesList.length
+    : (stats?.pending ?? 0);
+  const rejectedCount = stats?.rejected ?? 0;
+  const hasSuggested = suggestedCount > 0;
+  const approvedSorted = [...confirmedMatches].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-200 via-blue-100 to-blue-200">
-      {/* Matching Progress Banner */}
-      {isMatchingInProgress && (
-        <div className={`bg-gradient-to-r from-primary-blue to-blue-600 text-white px-4 py-3 shadow-lg ${isMatchingPaused ? 'opacity-75' : ''}`}>
-          <div className="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-3">
-              {isMatchingPaused ? (
-                <Pause className="w-5 h-5" />
-              ) : (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              )}
-              <span className="font-medium">
-                {isMatchingPaused ? 'Matching paused' : 'Matching transactions...'} {matchingProgress?.progress || 0} of {matchingProgress?.total || 0}
-              </span>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="text-blue-100 text-sm">
-                {matchingProgress?.matches_found || 0} matches
-              </span>
-              <div className="w-48 bg-blue-400/50 rounded-full h-2">
-                <div 
-                  className="bg-white rounded-full h-2 transition-all duration-300"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-              <span className="text-sm font-semibold">{progressPercent}%</span>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Header */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="rounded-2xl border border-blue-300/50 bg-white/80 backdrop-blur-sm shadow-2xl p-6 mb-6">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-primary-blue to-blue-600 bg-clip-text text-transparent mb-1">
-                Transaction Matching
-              </h1>
-              <p className="text-sm text-text-secondary">
-                Review and reconcile transactions
-              </p>
-            </div>
-            
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* Show review button when there are matches to review - even during matching */}
-              {((stats?.pending || 0) > 0 || (matchingProgress?.matches_found || 0) > 0) && (
-                <button
-                  onClick={handleStartReview}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-gold to-yellow-500 text-primary-blue rounded-xl hover:shadow-xl hover:scale-105 transition-all duration-300 font-bold text-sm shadow-lg"
-                >
-                  <Eye className="w-4 h-4" />
-                  Review ({isMatchingInProgress ? matchingProgress?.matches_found || 0 : stats?.pending || 0})
-                </button>
-              )}
-              
+        {/* Title + actions row (Import-style, no box) */}
+        <div className="mb-4 flex items-start justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-primary-blue to-blue-600 bg-clip-text text-transparent mb-1">
+              Transaction Matching
+            </h1>
+            <p className="text-sm text-text-secondary">
+              Review and reconcile transactions
+            </p>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap flex-shrink-0">
+            {isMatchingInProgress && !isMatchingPaused && (
               <button
-                onClick={() => setShowSettings(!showSettings)}
+                onClick={handlePauseMatching}
                 className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors text-sm"
               >
-                <Settings className="w-4 h-4" />
-                Settings
+                <Pause className="w-4 h-4" />
+                Pause Matching
               </button>
-              
-              {/* Pause/Resume/Re-run Button */}
-              {isMatchingInProgress && !isMatchingPaused && (
-                <button
-                  onClick={handlePauseMatching}
-                  className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors text-sm"
-                >
-                  <Pause className="w-4 h-4" />
-                  Pause Matching
+            )}
+            {isMatchingInProgress && isMatchingPaused && (
+              <button
+                onClick={handleResumeMatching}
+                className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors text-sm"
+              >
+                <Play className="w-4 h-4" />
+                Resume Matching
+              </button>
+            )}
+            {!isMatchingInProgress && (
+              <button
+                onClick={handleRerunMatching}
+                disabled={isRerunning}
+                className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors disabled:opacity-50 text-sm"
+              >
+                <RefreshCw className={`w-4 h-4 ${isRerunning ? 'animate-spin' : ''}`} />
+                Re-run Matching
+              </button>
+            )}
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors text-sm"
+            >
+              <Settings className="w-4 h-4" />
+              Settings
+            </button>
+            <div className="relative group z-[100]">
+              <button className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-gold to-yellow-500 text-primary-blue rounded-xl hover:shadow-xl hover:scale-105 transition-all duration-300 font-bold text-sm shadow-lg">
+                <Download className="w-4 h-4" />
+                Export
+              </button>
+              <div className="absolute right-0 top-full mt-1 bg-white/95 backdrop-blur-sm border border-blue-300/50 rounded-xl shadow-2xl py-1 hidden group-hover:block z-[100] min-w-[180px]">
+                <button onClick={() => handleExport('matches')} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
+                  Matched Transactions
                 </button>
-              )}
-              {isMatchingInProgress && isMatchingPaused && (
-                <button
-                  onClick={handleResumeMatching}
-                  className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors text-sm"
-                >
-                  <Play className="w-4 h-4" />
-                  Resume Matching
+                <button onClick={() => handleExport('ledger')} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
+                  Unmatched Ledger
                 </button>
-              )}
-              {!isMatchingInProgress && (
-                <button
-                  onClick={handleRerunMatching}
-                  disabled={isRerunning}
-                  className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors disabled:opacity-50 text-sm"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isRerunning ? 'animate-spin' : ''}`} />
-                  Re-run Matching
+                <button onClick={() => handleExport('bank')} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
+                  Unmatched Bank
                 </button>
-              )}
-              
-              <div className="relative group">
-                <button className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-gold to-yellow-500 text-primary-blue rounded-xl hover:shadow-xl hover:scale-105 transition-all duration-300 font-bold text-sm shadow-lg">
-                  <Download className="w-4 h-4" />
-                  Export
+                <button onClick={() => handleExport('audit')} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
+                  Audit Trail
                 </button>
-                <div className="absolute right-0 top-full mt-1 bg-white/95 backdrop-blur-sm border border-blue-300/50 rounded-xl shadow-2xl py-1 hidden group-hover:block z-10 min-w-[180px]">
-                  <button onClick={() => handleExport('matches')} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
-                    Matched Transactions
-                  </button>
-                  <button onClick={() => handleExport('ledger')} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
-                    Unmatched Ledger
-                  </button>
-                  <button onClick={() => handleExport('bank')} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
-                    Unmatched Bank
-                  </button>
-                  <button onClick={() => handleExport('audit')} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
-                    Audit Trail
-                  </button>
-                </div>
               </div>
             </div>
           </div>
-          
-          {/* Settings Panel */}
-          {showSettings && (
-            <div className="mt-4 p-5 bg-blue-50/50 rounded-xl border border-blue-200/50">
-              <h3 className="font-semibold mb-4 text-text-primary">Matching Settings</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm text-text-secondary mb-1.5">Vendor Threshold</label>
+        </div>
+
+        {/* Settings panel (collapsible) — above progress bar */}
+        {showSettings && (
+          <div className="mb-6 p-5 rounded-2xl border border-blue-300/50 bg-white/80 backdrop-blur-sm shadow-xl">
+            <h3 className="font-semibold mb-4 text-text-primary">Matching Settings</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm text-text-secondary mb-1.5">Vendor Threshold</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={matchingConfig.vendor_threshold}
+                  onChange={(e) => setMatchingConfig({ ...matchingConfig, vendor_threshold: parseFloat(e.target.value) })}
+                  className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-text-secondary mb-1.5">Amount Tolerance</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={matchingConfig.amount_tolerance}
+                  onChange={(e) => setMatchingConfig({ ...matchingConfig, amount_tolerance: parseFloat(e.target.value) })}
+                  className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-text-secondary mb-1.5">Date Window (days)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={matchingConfig.date_window}
+                  onChange={(e) => setMatchingConfig({ ...matchingConfig, date_window: parseInt(e.target.value) })}
+                  className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
+                />
+              </div>
+              <div className="flex items-end">
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={matchingConfig.vendor_threshold}
-                    onChange={(e) => setMatchingConfig({ ...matchingConfig, vendor_threshold: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
+                    type="checkbox"
+                    checked={matchingConfig.require_reference}
+                    onChange={(e) => setMatchingConfig({ ...matchingConfig, require_reference: e.target.checked })}
+                    className="w-4 h-4 text-primary-blue focus:ring-primary-blue border-blue-300 rounded"
                   />
-                </div>
-                <div>
-                  <label className="block text-sm text-text-secondary mb-1.5">Amount Tolerance</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={matchingConfig.amount_tolerance}
-                    onChange={(e) => setMatchingConfig({ ...matchingConfig, amount_tolerance: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-text-secondary mb-1.5">Date Window (days)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={matchingConfig.date_window}
-                    onChange={(e) => setMatchingConfig({ ...matchingConfig, date_window: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
-                  />
-                </div>
-                <div className="flex items-end">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={matchingConfig.require_reference}
-                      onChange={(e) => setMatchingConfig({ ...matchingConfig, require_reference: e.target.checked })}
-                      className="w-4 h-4 text-primary-blue focus:ring-primary-blue border-blue-300 rounded"
-                    />
-                    <span className="text-sm text-text-secondary">Require Reference</span>
-                  </label>
-                </div>
+                  <span className="text-sm text-text-secondary">Require Reference</span>
+                </label>
               </div>
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
 
-      {/* Main Content - 3 Column Layout */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" style={{ minHeight: 'calc(100vh - 320px)' }}>
+        {/* Progress bar — thin, full-width */}
+        {isMatchingInProgress && (
+          <div className="mb-4">
+            <div className="h-1 w-full bg-primary-blue/25 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary-blue rounded-full transition-all duration-300"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Main Content - 3 Column Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6" style={{ minHeight: 'calc(100vh - 280px)' }}>
           
           {/* Left Column - Unmatched Ledger */}
           <div className="rounded-2xl border border-blue-300/50 bg-white/80 backdrop-blur-sm shadow-2xl overflow-hidden flex flex-col hover:shadow-3xl transition-shadow duration-300">
             <div className="bg-gradient-to-r from-primary-blue/10 to-blue-100/50 border-b border-blue-300/50 px-4 py-3 flex items-center justify-between">
-              <h2 className="font-bold text-text-primary flex items-center gap-2 text-sm">
-                <AlertCircle className="w-4 h-4 text-primary-blue" />
+              <h2 className="font-bold text-text-primary flex items-center text-sm">
                 Unmatched Ledger
-                <span className="text-text-secondary font-normal">({unmatchedLedger.length})</span>
+                <CountBadge value={unmatchedLedger.length} tone="ledger" title="Number of unmatched ledger entries" />
               </h2>
               {unmatchedLedger.length > 0 && (
                 <button
@@ -532,80 +548,94 @@ const Matching = () => {
             </div>
           </div>
 
-          {/* Center Column - Matched Transactions / Pending Matches */}
+          {/* Center Column - Matches */}
           <div className="rounded-2xl border border-blue-300/50 bg-white/80 backdrop-blur-sm shadow-2xl overflow-hidden flex flex-col hover:shadow-3xl transition-shadow duration-300">
             <div className="bg-gradient-to-r from-primary-gold/20 to-yellow-100/50 border-b border-blue-300/50 px-4 py-3 flex items-center justify-between">
-              <h2 className="font-bold text-text-primary flex items-center gap-2 text-sm">
-                <ArrowLeftRight className="w-4 h-4 text-primary-gold" />
-                {isMatchingInProgress ? (
-                  <>Matches Found <span className="text-text-secondary font-normal">({matchingProgress?.matches_found || 0})</span></>
-                ) : (
-                  <>Matched <span className="text-text-secondary font-normal">({confirmedMatches.length})</span></>
-                )}
+              <h2 className="font-bold text-text-primary flex items-center text-sm">
+                <ArrowLeftRight className="w-4 h-4 text-primary-gold mr-2" />
+                Matches
                 {isMatchingInProgress && !isMatchingPaused && <Loader2 className="w-4 h-4 animate-spin ml-2 text-primary-gold" />}
               </h2>
-              {confirmedMatches.length > 0 && !isMatchingInProgress && (
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => handleExport('matches')}
-                  className="text-xs text-primary-blue hover:text-blue-700 flex items-center gap-1 transition-colors"
+                  onClick={handleStartReview}
+                  disabled={!hasSuggested}
+                  title={hasSuggested ? undefined : 'No suggested matches to review'}
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-gold to-yellow-500 text-primary-blue rounded-xl hover:shadow-lg hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none transition-all duration-300 font-bold text-sm shadow-md"
                 >
-                  <Download className="w-3 h-3" />
-                  Export
+                  <Eye className="w-4 h-4" />
+                  Review Matches
                 </button>
-              )}
+                {confirmedMatches.length > 0 && !isMatchingInProgress && (
+                  <button
+                    onClick={() => handleExport('matches')}
+                    className="text-xs text-primary-blue hover:text-blue-700 flex items-center gap-1 transition-colors"
+                  >
+                    <Download className="w-3 h-3" />
+                    Export
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto p-3">
-              {/* Show pending matches during matching */}
-              {isMatchingInProgress && pendingMatches.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-xs text-text-secondary text-center mb-2 font-medium">
-                    Latest matches
-                  </div>
-                  {pendingMatches.map((match, idx) => (
-                    <div key={idx} className="p-3 bg-blue-50/50 border border-blue-200/50 rounded-lg text-sm animate-pulse">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-text-primary truncate">{match.ledger_txn.vendor}</div>
-                          <div className="text-xs text-text-secondary">{formatDate(match.ledger_txn.date)}</div>
-                        </div>
-                        <ArrowLeftRight className="w-4 h-4 text-primary-blue flex-shrink-0" />
-                        <div className="flex-1 min-w-0 text-right">
-                          <div className="font-medium text-text-primary truncate">{match.bank_txn?.vendor || '-'}</div>
-                          <div className="text-xs text-text-secondary">{match.bank_txn ? formatDate(match.bank_txn.date) : '-'}</div>
-                        </div>
+              {/* Compact summary — always visible */}
+              <div className="mb-3">
+                <p className="text-sm text-text-primary">
+                  <span className="font-semibold">{approvedCount} approved</span>
+                  <span className="text-text-secondary mx-1.5">•</span>
+                  <span className="text-text-secondary">{suggestedCount} suggested</span>
+                </p>
+                {rejectedCount > 0 && (
+                  <p className="text-xs text-text-secondary mt-1">Rejected: {rejectedCount}</p>
+                )}
+              </div>
+
+              {/* Empty state when no approved and no suggested */}
+              {approvedCount === 0 && pendingMatchesList.length === 0 && (
+                <div className="text-center py-6 text-text-secondary">
+                  <p className="text-sm">No matches yet</p>
+                </div>
+              )}
+
+              {/* Pending first (asc by suggestion order), then approved (desc by approval time) */}
+              {(pendingMatchesList.length > 0 || approvedSorted.length > 0) && (
+              <div className="space-y-2">
+                {pendingMatchesList.map(({ index, match }) => (
+                  <button
+                    key={`pending-${index}`}
+                    type="button"
+                    onClick={() => handleOpenReviewForMatch(index, false)}
+                    className="w-full text-left p-3 bg-blue-50/50 border border-blue-200/50 rounded-lg text-sm hover:bg-blue-50 hover:border-blue-300/60 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-text-primary truncate">{match.ledger_txn.vendor}</div>
+                        <div className="text-xs text-text-secondary">{formatDate(match.ledger_txn.date)}</div>
                       </div>
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-semibold">{formatCurrency(match.ledger_txn.amount)}</span>
-                        <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
-                          {(match.confidence * 100).toFixed(0)}%
-                        </span>
-                        <span className="font-semibold">{match.bank_txn ? formatCurrency(match.bank_txn.amount) : '-'}</span>
+                      <ArrowLeftRight className="w-4 h-4 text-primary-blue flex-shrink-0" />
+                      <div className="flex-1 min-w-0 text-right">
+                        <div className="font-medium text-text-primary truncate">{match.bank_txn?.vendor || '-'}</div>
+                        <div className="text-xs text-text-secondary">{match.bank_txn ? formatDate(match.bank_txn.date) : '-'}</div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-              
-              {/* Show confirmed matches when not matching */}
-              {!isMatchingInProgress && confirmedMatches.length === 0 && (
-                <div className="text-center py-8 text-text-secondary">
-                  <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                  <p className="text-sm">No matches yet</p>
-                  {stats?.pending > 0 && (
-                    <button
-                      onClick={handleStartReview}
-                      className="mt-3 text-sm text-primary-blue hover:underline font-medium"
-                    >
-                      Review {stats.pending} pending
-                    </button>
-                  )}
-                </div>
-              )}
-              
-              {!isMatchingInProgress && confirmedMatches.length > 0 && (
-                <div className="space-y-2">
-                  {confirmedMatches.map((match, idx) => (
-                    <div key={idx} className="p-3 bg-blue-50/50 border border-blue-200/50 rounded-lg text-sm hover:bg-blue-50 transition-colors">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-semibold">{formatCurrency(match.ledger_txn.amount)}</span>
+                      <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
+                        {(match.confidence * 100).toFixed(0)}%
+                      </span>
+                      <span className="font-semibold">{match.bank_txn ? formatCurrency(match.bank_txn.amount) : '-'}</span>
+                    </div>
+                  </button>
+                ))}
+                {approvedSorted.map((match) => (
+                  <button
+                    key={`approved-${match.ledger_txn.id}-${match.bank_txn.id}`}
+                    type="button"
+                    onClick={() => handleOpenReviewForMatch(0, true, match)}
+                    className="w-full text-left p-3 bg-green-50/70 border border-green-200/60 rounded-lg text-sm hover:bg-green-50 hover:border-green-300/70 transition-colors cursor-pointer flex items-center gap-2"
+                  >
+                    <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2">
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-text-primary truncate">{match.ledger_txn.vendor}</div>
@@ -625,8 +655,9 @@ const Matching = () => {
                         <span className="font-semibold">{formatCurrency(match.bank_txn.amount)}</span>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  </button>
+                ))}
+              </div>
               )}
             </div>
           </div>
@@ -634,10 +665,9 @@ const Matching = () => {
           {/* Right Column - Unmatched Bank */}
           <div className="rounded-2xl border border-blue-300/50 bg-white/80 backdrop-blur-sm shadow-2xl overflow-hidden flex flex-col hover:shadow-3xl transition-shadow duration-300">
             <div className="bg-gradient-to-r from-primary-blue/10 to-blue-100/50 border-b border-blue-300/50 px-4 py-3 flex items-center justify-between">
-              <h2 className="font-bold text-text-primary flex items-center gap-2 text-sm">
-                <AlertCircle className="w-4 h-4 text-primary-blue" />
+              <h2 className="font-bold text-text-primary flex items-center text-sm">
                 Unmatched Bank
-                <span className="text-text-secondary font-normal">({unmatchedBank.length})</span>
+                <CountBadge value={unmatchedBank.length} tone="bank" title="Number of unmatched bank transactions" />
               </h2>
               {unmatchedBank.length > 0 && (
                 <button
@@ -695,9 +725,11 @@ const Matching = () => {
           onAction={handleMatchAction}
           onClose={() => {
             setShowReviewModal(false);
+            setReviewReadOnly(false);
             loadAllData();
           }}
           isSubmitting={isSubmitting}
+          readOnly={reviewReadOnly}
         />
       )}
       

@@ -44,6 +44,11 @@ class MatchAction(BaseModel):
     notes: Optional[str] = None
 
 
+class SeekRequest(BaseModel):
+    """Request to seek to a specific match index for review."""
+    index: int
+
+
 class MatchResult(BaseModel):
     """Match result from matching engine."""
     ledger_txn: Transaction

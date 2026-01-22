@@ -86,6 +86,16 @@ export const resumeMatching = async (): Promise<{ status: string }> => {
   return response.data;
 };
 
+export const getPendingMatches = async (): Promise<{ matches: { index: number; match: MatchResult }[]; start_index: number }> => {
+  const response = await api.get('/match/pending');
+  return response.data;
+};
+
+export const seekToMatchIndex = async (index: number): Promise<{ status: string; index: number }> => {
+  const response = await api.post('/match/seek', { index });
+  return response.data;
+};
+
 export const getNextMatch = async (): Promise<{ done: boolean; match_index: number; total: number; match: MatchResult } | { done: true; message: string }> => {
   const response = await api.get('/match/next');
   return response.data;
