@@ -116,8 +116,7 @@ def run_matching_async(config: MatchingConfig):
                 }
                 with match_state_lock:
                     match_state['match_results'].append(result_entry)
-                    # Sort by confidence after each addition
-                    match_state['match_results'].sort(key=lambda r: r['confidence'], reverse=True)
+                    # Note: We don't sort here to avoid index shifting during user review
             else:
                 result_entry = {
                     'ledger_txn': ledger_txn,
@@ -131,7 +130,13 @@ def run_matching_async(config: MatchingConfig):
                 with match_state_lock:
                     match_state['unmatched_results'].append(result_entry)
         
+        # Sync matched_bank_ids back to match_state before completing
         with match_state_lock:
+            # Ensure matched_bank_ids is a set
+            if not isinstance(match_state['matched_bank_ids'], set):
+                match_state['matched_bank_ids'] = set(match_state['matched_bank_ids']) if match_state['matched_bank_ids'] else set()
+            # Update with all matched bank IDs from this run
+            match_state['matched_bank_ids'].update(matched_bank_ids)
             match_state['matching_in_progress'] = False
             
     except Exception as e:
