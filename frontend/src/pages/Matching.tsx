@@ -430,41 +430,10 @@ const Matching = () => {
               </div>
             </div>
           )}
-          
-          {/* Stats Bar */}
-          <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3">
-            <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-center">
-              <div className="text-2xl font-bold text-green-600">
-                {stats?.confirmed || 0}
-                {isMatchingInProgress && <span className="text-sm ml-1">(+{matchingProgress?.matches_found || 0})</span>}
-              </div>
-              <div className="text-xs text-green-700">Matched</div>
-            </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-center">
-              <div className="text-2xl font-bold text-blue-600">
-                {isMatchingInProgress ? matchingProgress?.matches_found || 0 : stats?.pending || 0}
-              </div>
-              <div className="text-xs text-blue-700">{isMatchingInProgress ? 'Found So Far' : 'Pending Review'}</div>
-            </div>
-            <div className="bg-orange-50 border border-orange-200 rounded-lg px-4 py-3 text-center">
-              <div className="text-2xl font-bold text-orange-600">
-                {isMatchingInProgress ? matchingProgress?.unmatched_count || 0 : unmatchedLedger.length}
-              </div>
-              <div className="text-xs text-orange-700">Unmatched Ledger</div>
-            </div>
-            <div className="bg-purple-50 border border-purple-200 rounded-lg px-4 py-3 text-center">
-              <div className="text-2xl font-bold text-purple-600">{unmatchedBank.length}</div>
-              <div className="text-xs text-purple-700">Unmatched Bank</div>
-            </div>
-            <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-center">
-              <div className="text-2xl font-bold text-gray-600">{stats?.rejected || 0}</div>
-              <div className="text-xs text-gray-600">Rejected</div>
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Main Content - Git Merge Style */}
+      {/* Main Content - 3 Column Layout */}
       <div className="max-w-full mx-auto p-4">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" style={{ minHeight: 'calc(100vh - 280px)' }}>
           
@@ -518,7 +487,7 @@ const Matching = () => {
                 {isMatchingInProgress ? (
                   <>Matches Found ({matchingProgress?.matches_found || 0})</>
                 ) : (
-                  <>Matched ({confirmedMatches.length})</>
+                  <>Matched ({confirmedMatches.length}){(stats?.rejected || 0) > 0 && <span className="text-gray-500 font-normal ml-2">• {stats.rejected} rejected</span>}</>
                 )}
                 {isMatchingInProgress && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
               </h2>
