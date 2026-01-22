@@ -42,18 +42,18 @@ const MatchReviewModal = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="rounded-2xl border border-blue-300/50 bg-white/95 backdrop-blur-sm shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-blue-300/50 bg-gradient-to-r from-primary-blue/10 to-blue-100/50">
           <div>
-            <h2 className="text-xl font-bold text-text-primary">Review Match</h2>
+            <h2 className="text-xl font-bold bg-gradient-to-r from-primary-blue to-blue-600 bg-clip-text text-transparent">Review Match</h2>
             <p className="text-sm text-text-secondary">
-              {matchIndex + 1} of {total} matches to review
+              {matchIndex + 1} of {total}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+            className="p-2 hover:bg-blue-100/50 rounded-full transition-colors"
           >
             <X className="w-5 h-5 text-text-secondary" />
           </button>
@@ -62,7 +62,7 @@ const MatchReviewModal = ({
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           {/* AI Explanation */}
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="mb-6 p-4 bg-blue-50/50 border border-blue-200/50 rounded-xl">
             <div className="flex items-start gap-3">
               <span className="text-2xl">🤖</span>
               <div className="flex-1">
@@ -72,7 +72,7 @@ const MatchReviewModal = ({
                     {(match.confidence * 100).toFixed(0)}% confidence
                   </span>
                 </div>
-                <p className="text-text-secondary">{match.llm_explanation || 'No explanation available'}</p>
+                <p className="text-text-secondary text-sm">{match.llm_explanation || 'No explanation available'}</p>
               </div>
             </div>
           </div>
@@ -80,8 +80,8 @@ const MatchReviewModal = ({
           {/* Transaction Comparison */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Ledger Transaction */}
-            <div className="border-2 border-blue-200 rounded-lg p-4 bg-blue-50/50">
-              <h3 className="font-semibold text-text-primary mb-3 flex items-center gap-2">
+            <div className="border-2 border-blue-300/50 rounded-xl p-4 bg-blue-50/30">
+              <h3 className="font-semibold text-text-primary mb-3 flex items-center gap-2 text-sm">
                 <span>📒</span> Ledger Entry
               </h3>
               <div className="space-y-2 text-sm">
@@ -111,8 +111,8 @@ const MatchReviewModal = ({
             </div>
 
             {/* Bank Transaction */}
-            <div className="border-2 border-green-200 rounded-lg p-4 bg-green-50/50">
-              <h3 className="font-semibold text-text-primary mb-3 flex items-center gap-2">
+            <div className="border-2 border-blue-300/50 rounded-xl p-4 bg-blue-50/30">
+              <h3 className="font-semibold text-text-primary mb-3 flex items-center gap-2 text-sm">
                 <span>🏦</span> Bank Transaction
               </h3>
               {match.bank_txn ? (
@@ -141,15 +141,15 @@ const MatchReviewModal = ({
                   )}
                 </div>
               ) : (
-                <p className="text-text-secondary">No bank transaction matched</p>
+                <p className="text-text-secondary text-sm">No bank transaction matched</p>
               )}
             </div>
           </div>
 
           {/* Component Scores */}
           {Object.keys(match.component_scores).length > 0 && (
-            <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-              <h4 className="text-sm font-semibold text-text-secondary mb-2">Match Scores</h4>
+            <div className="mt-4 p-3 bg-blue-50/30 rounded-xl border border-blue-200/50">
+              <h4 className="text-sm font-semibold text-text-primary mb-2">Match Scores</h4>
               <div className="flex flex-wrap gap-3">
                 {Object.entries(match.component_scores).map(([key, value]) => (
                   <div key={key} className="text-xs">
@@ -165,19 +165,19 @@ const MatchReviewModal = ({
         </div>
 
         {/* Actions Footer */}
-        <div className="px-6 py-4 border-t bg-gray-50 flex flex-wrap gap-3 justify-center">
+        <div className="px-6 py-4 border-t border-blue-300/50 bg-gradient-to-r from-primary-blue/10 to-blue-100/50 flex flex-wrap gap-3 justify-center">
           <button
             onClick={() => onAction('match')}
             disabled={isSubmitting || !match.bank_txn}
-            className="flex items-center gap-2 px-5 py-2.5 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-gold to-yellow-500 text-primary-blue rounded-xl hover:shadow-xl hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-lg transition-all duration-300 font-bold text-sm shadow-lg"
           >
             <Check className="w-4 h-4" />
-            Accept Match
+            Accept
           </button>
           <button
             onClick={() => onAction('reject')}
             disabled={isSubmitting}
-            className="flex items-center gap-2 px-5 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors font-medium"
+            className="flex items-center gap-2 px-5 py-2.5 border border-red-300 text-red-600 rounded-xl hover:bg-red-50 disabled:opacity-50 transition-colors font-medium text-sm"
           >
             <XCircle className="w-4 h-4" />
             Reject
@@ -185,7 +185,7 @@ const MatchReviewModal = ({
           <button
             onClick={() => onAction('duplicate')}
             disabled={isSubmitting}
-            className="flex items-center gap-2 px-5 py-2.5 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 disabled:opacity-50 transition-colors font-medium"
+            className="flex items-center gap-2 px-5 py-2.5 border border-blue-300 text-primary-blue rounded-xl hover:bg-blue-50 disabled:opacity-50 transition-colors font-medium text-sm"
           >
             <Copy className="w-4 h-4" />
             Duplicate
@@ -193,7 +193,7 @@ const MatchReviewModal = ({
           <button
             onClick={() => onAction('skip')}
             disabled={isSubmitting}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gray-400 text-white rounded-lg hover:bg-gray-500 disabled:opacity-50 transition-colors font-medium"
+            className="flex items-center gap-2 px-5 py-2.5 border border-blue-300 text-text-secondary rounded-xl hover:bg-blue-50 disabled:opacity-50 transition-colors font-medium text-sm"
           >
             <SkipForward className="w-4 h-4" />
             Skip

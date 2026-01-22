@@ -9,6 +9,8 @@ import {
   submitMatchAction,
   runMatchingAsync,
   getMatchingProgress,
+  pauseMatching,
+  resumeMatching,
   exportMatches,
   exportUnmatchedLedger,
   exportUnmatchedBank,
@@ -25,7 +27,9 @@ import {
   FileText,
   Settings,
   Eye,
-  Loader2
+  Loader2,
+  Pause,
+  Play
 } from 'lucide-react';
 
 interface ConfirmedMatch {
@@ -39,6 +43,7 @@ interface ConfirmedMatch {
 
 interface MatchingProgress {
   in_progress: boolean;
+  paused?: boolean;
   progress: number;
   total: number;
   matches_found: number;
@@ -214,6 +219,24 @@ const Matching = () => {
     }
   };
 
+  const handlePauseMatching = async () => {
+    try {
+      await pauseMatching();
+      await pollProgress(); // Update state immediately
+    } catch (error: any) {
+      alert(`Pause failed: ${error.response?.data?.detail || error.message}`);
+    }
+  };
+
+  const handleResumeMatching = async () => {
+    try {
+      await resumeMatching();
+      await pollProgress(); // Update state immediately
+    } catch (error: any) {
+      alert(`Resume failed: ${error.response?.data?.detail || error.message}`);
+    }
+  };
+
   const handleRerunMatching = async () => {
     setIsRerunning(true);
     try {
@@ -223,6 +246,8 @@ const Matching = () => {
       if (!pollingRef.current) {
         pollingRef.current = setInterval(pollProgress, 1000);
       }
+      // Reset isRerunning after successfully starting matching
+      setIsRerunning(false);
     } catch (error: any) {
       alert(`Re-run failed: ${error.response?.data?.detail || error.message}`);
       setIsRerunning(false);
@@ -281,46 +306,53 @@ const Matching = () => {
   };
 
   const isMatchingInProgress = matchingProgress?.in_progress || false;
+  const isMatchingPaused = matchingProgress?.paused || false;
   const progressPercent = matchingProgress?.total 
     ? Math.round((matchingProgress.progress / matchingProgress.total) * 100) 
     : 0;
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gradient-to-br from-blue-200 via-blue-100 to-blue-200">
       {/* Matching Progress Banner */}
       {isMatchingInProgress && (
-        <div className="bg-blue-600 text-white px-4 py-3">
-          <div className="max-w-full mx-auto flex items-center justify-between">
+        <div className={`bg-gradient-to-r from-primary-blue to-blue-600 text-white px-4 py-3 shadow-lg ${isMatchingPaused ? 'opacity-75' : ''}`}>
+          <div className="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <Loader2 className="w-5 h-5 animate-spin" />
+              {isMatchingPaused ? (
+                <Pause className="w-5 h-5" />
+              ) : (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              )}
               <span className="font-medium">
-                AI is matching transactions... {matchingProgress?.progress || 0} of {matchingProgress?.total || 0}
+                {isMatchingPaused ? 'Matching paused' : 'Matching transactions...'} {matchingProgress?.progress || 0} of {matchingProgress?.total || 0}
               </span>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-blue-100">
-                {matchingProgress?.matches_found || 0} matches found
+              <span className="text-blue-100 text-sm">
+                {matchingProgress?.matches_found || 0} matches
               </span>
-              <div className="w-48 bg-blue-400 rounded-full h-2">
+              <div className="w-48 bg-blue-400/50 rounded-full h-2">
                 <div 
                   className="bg-white rounded-full h-2 transition-all duration-300"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
-              <span className="text-sm">{progressPercent}%</span>
+              <span className="text-sm font-semibold">{progressPercent}%</span>
             </div>
           </div>
         </div>
       )}
       
       {/* Header */}
-      <div className="bg-white border-b shadow-sm">
-        <div className="max-w-full mx-auto px-4 py-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="rounded-2xl border border-blue-300/50 bg-white/80 backdrop-blur-sm shadow-2xl p-6 mb-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-text-primary">Transaction Matching</h1>
+              <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-primary-blue to-blue-600 bg-clip-text text-transparent mb-1">
+                Transaction Matching
+              </h1>
               <p className="text-sm text-text-secondary">
-                Review and reconcile your ledger and bank transactions
+                Review and reconcile transactions
               </p>
             </div>
             
@@ -330,47 +362,67 @@ const Matching = () => {
               {((stats?.pending || 0) > 0 || (matchingProgress?.matches_found || 0) > 0) && (
                 <button
                   onClick={handleStartReview}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary-blue text-white rounded-lg hover:bg-opacity-90 transition-colors font-medium"
+                  className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-gold to-yellow-500 text-primary-blue rounded-xl hover:shadow-xl hover:scale-105 transition-all duration-300 font-bold text-sm shadow-lg"
                 >
                   <Eye className="w-4 h-4" />
-                  Review Matches ({isMatchingInProgress ? matchingProgress?.matches_found || 0 : stats?.pending || 0})
-                  {isMatchingInProgress && <span className="text-xs opacity-75">(live)</span>}
+                  Review ({isMatchingInProgress ? matchingProgress?.matches_found || 0 : stats?.pending || 0})
                 </button>
               )}
               
               <button
                 onClick={() => setShowSettings(!showSettings)}
-                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors text-sm"
               >
                 <Settings className="w-4 h-4" />
                 Settings
               </button>
               
-              <button
-                onClick={handleRerunMatching}
-                disabled={isRerunning || isMatchingInProgress}
-                className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-              >
-                <RefreshCw className={`w-4 h-4 ${isRerunning || isMatchingInProgress ? 'animate-spin' : ''}`} />
-                {isMatchingInProgress ? 'Matching...' : 'Re-run Matching'}
-              </button>
+              {/* Pause/Resume/Re-run Button */}
+              {isMatchingInProgress && !isMatchingPaused && (
+                <button
+                  onClick={handlePauseMatching}
+                  className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors text-sm"
+                >
+                  <Pause className="w-4 h-4" />
+                  Pause Matching
+                </button>
+              )}
+              {isMatchingInProgress && isMatchingPaused && (
+                <button
+                  onClick={handleResumeMatching}
+                  className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors text-sm"
+                >
+                  <Play className="w-4 h-4" />
+                  Resume Matching
+                </button>
+              )}
+              {!isMatchingInProgress && (
+                <button
+                  onClick={handleRerunMatching}
+                  disabled={isRerunning}
+                  className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors disabled:opacity-50 text-sm"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isRerunning ? 'animate-spin' : ''}`} />
+                  Re-run Matching
+                </button>
+              )}
               
               <div className="relative group">
-                <button className="flex items-center gap-2 px-4 py-2 bg-primary-gold text-primary-blue rounded-lg hover:bg-opacity-90 transition-colors font-medium">
+                <button className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-gold to-yellow-500 text-primary-blue rounded-xl hover:shadow-xl hover:scale-105 transition-all duration-300 font-bold text-sm shadow-lg">
                   <Download className="w-4 h-4" />
                   Export
                 </button>
-                <div className="absolute right-0 top-full mt-1 bg-white border rounded-lg shadow-lg py-1 hidden group-hover:block z-10 min-w-[180px]">
-                  <button onClick={() => handleExport('matches')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm">
+                <div className="absolute right-0 top-full mt-1 bg-white/95 backdrop-blur-sm border border-blue-300/50 rounded-xl shadow-2xl py-1 hidden group-hover:block z-10 min-w-[180px]">
+                  <button onClick={() => handleExport('matches')} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
                     Matched Transactions
                   </button>
-                  <button onClick={() => handleExport('ledger')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm">
+                  <button onClick={() => handleExport('ledger')} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
                     Unmatched Ledger
                   </button>
-                  <button onClick={() => handleExport('bank')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm">
+                  <button onClick={() => handleExport('bank')} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
                     Unmatched Bank
                   </button>
-                  <button onClick={() => handleExport('audit')} className="w-full px-4 py-2 text-left hover:bg-gray-50 text-sm">
+                  <button onClick={() => handleExport('audit')} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
                     Audit Trail
                   </button>
                 </div>
@@ -380,11 +432,11 @@ const Matching = () => {
           
           {/* Settings Panel */}
           {showSettings && (
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg border">
-              <h3 className="font-semibold mb-3">Matching Settings</h3>
+            <div className="mt-4 p-5 bg-blue-50/50 rounded-xl border border-blue-200/50">
+              <h3 className="font-semibold mb-4 text-text-primary">Matching Settings</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-sm text-text-secondary mb-1">Vendor Threshold</label>
+                  <label className="block text-sm text-text-secondary mb-1.5">Vendor Threshold</label>
                   <input
                     type="number"
                     min="0"
@@ -392,39 +444,39 @@ const Matching = () => {
                     step="0.05"
                     value={matchingConfig.vendor_threshold}
                     onChange={(e) => setMatchingConfig({ ...matchingConfig, vendor_threshold: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-text-secondary mb-1">Amount Tolerance</label>
+                  <label className="block text-sm text-text-secondary mb-1.5">Amount Tolerance</label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     value={matchingConfig.amount_tolerance}
                     onChange={(e) => setMatchingConfig({ ...matchingConfig, amount_tolerance: parseFloat(e.target.value) })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-text-secondary mb-1">Date Window (days)</label>
+                  <label className="block text-sm text-text-secondary mb-1.5">Date Window (days)</label>
                   <input
                     type="number"
                     min="0"
                     value={matchingConfig.date_window}
                     onChange={(e) => setMatchingConfig({ ...matchingConfig, date_window: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                    className="w-full px-3 py-2 border border-blue-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-blue focus:border-transparent"
                   />
                 </div>
-                <div className="flex items-center">
+                <div className="flex items-end">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={matchingConfig.require_reference}
                       onChange={(e) => setMatchingConfig({ ...matchingConfig, require_reference: e.target.checked })}
-                      className="w-4 h-4"
+                      className="w-4 h-4 text-primary-blue focus:ring-primary-blue border-blue-300 rounded"
                     />
-                    <span className="text-sm">Require Reference</span>
+                    <span className="text-sm text-text-secondary">Require Reference</span>
                   </label>
                 </div>
               </div>
@@ -434,36 +486,37 @@ const Matching = () => {
       </div>
 
       {/* Main Content - 3 Column Layout */}
-      <div className="max-w-full mx-auto p-4">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" style={{ minHeight: 'calc(100vh - 280px)' }}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" style={{ minHeight: 'calc(100vh - 320px)' }}>
           
           {/* Left Column - Unmatched Ledger */}
-          <div className="bg-white rounded-lg border shadow-sm overflow-hidden flex flex-col">
-            <div className="bg-orange-50 border-b border-orange-200 px-4 py-3 flex items-center justify-between">
-              <h2 className="font-semibold text-orange-800 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4" />
-                Unmatched Ledger ({unmatchedLedger.length})
+          <div className="rounded-2xl border border-blue-300/50 bg-white/80 backdrop-blur-sm shadow-2xl overflow-hidden flex flex-col hover:shadow-3xl transition-shadow duration-300">
+            <div className="bg-gradient-to-r from-primary-blue/10 to-blue-100/50 border-b border-blue-300/50 px-4 py-3 flex items-center justify-between">
+              <h2 className="font-bold text-text-primary flex items-center gap-2 text-sm">
+                <AlertCircle className="w-4 h-4 text-primary-blue" />
+                Unmatched Ledger
+                <span className="text-text-secondary font-normal">({unmatchedLedger.length})</span>
               </h2>
               {unmatchedLedger.length > 0 && (
                 <button
                   onClick={() => handleExport('ledger')}
-                  className="text-xs text-orange-600 hover:text-orange-800 flex items-center gap-1"
+                  className="text-xs text-primary-blue hover:text-blue-700 flex items-center gap-1 transition-colors"
                 >
                   <Download className="w-3 h-3" />
                   Export
                 </button>
               )}
             </div>
-            <div className="flex-1 overflow-y-auto p-2">
+            <div className="flex-1 overflow-y-auto p-3">
               {unmatchedLedger.length === 0 ? (
                 <div className="text-center py-8 text-text-secondary">
                   <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-green-500" />
-                  <p className="text-sm">All ledger items matched!</p>
+                  <p className="text-sm">All matched!</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {unmatchedLedger.map((txn) => (
-                    <div key={txn.id} className="p-3 bg-orange-50/50 border border-orange-100 rounded-lg text-sm">
+                    <div key={txn.id} className="p-3 bg-blue-50/50 border border-blue-200/50 rounded-lg text-sm hover:bg-blue-50 transition-colors">
                       <div className="flex justify-between items-start mb-1">
                         <span className="font-medium text-text-primary truncate max-w-[60%]">{txn.vendor}</span>
                         <span className="font-semibold text-text-primary whitespace-nowrap">{formatCurrency(txn.amount)}</span>
@@ -480,42 +533,42 @@ const Matching = () => {
           </div>
 
           {/* Center Column - Matched Transactions / Pending Matches */}
-          <div className="bg-white rounded-lg border shadow-sm overflow-hidden flex flex-col">
-            <div className="bg-green-50 border-b border-green-200 px-4 py-3 flex items-center justify-between">
-              <h2 className="font-semibold text-green-800 flex items-center gap-2">
-                <ArrowLeftRight className="w-4 h-4" />
+          <div className="rounded-2xl border border-blue-300/50 bg-white/80 backdrop-blur-sm shadow-2xl overflow-hidden flex flex-col hover:shadow-3xl transition-shadow duration-300">
+            <div className="bg-gradient-to-r from-primary-gold/20 to-yellow-100/50 border-b border-blue-300/50 px-4 py-3 flex items-center justify-between">
+              <h2 className="font-bold text-text-primary flex items-center gap-2 text-sm">
+                <ArrowLeftRight className="w-4 h-4 text-primary-gold" />
                 {isMatchingInProgress ? (
-                  <>Matches Found ({matchingProgress?.matches_found || 0})</>
+                  <>Matches Found <span className="text-text-secondary font-normal">({matchingProgress?.matches_found || 0})</span></>
                 ) : (
-                  <>Matched ({confirmedMatches.length}){(stats?.rejected || 0) > 0 && <span className="text-gray-500 font-normal ml-2">• {stats.rejected} rejected</span>}</>
+                  <>Matched <span className="text-text-secondary font-normal">({confirmedMatches.length})</span></>
                 )}
-                {isMatchingInProgress && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
+                {isMatchingInProgress && !isMatchingPaused && <Loader2 className="w-4 h-4 animate-spin ml-2 text-primary-gold" />}
               </h2>
               {confirmedMatches.length > 0 && !isMatchingInProgress && (
                 <button
                   onClick={() => handleExport('matches')}
-                  className="text-xs text-green-600 hover:text-green-800 flex items-center gap-1"
+                  className="text-xs text-primary-blue hover:text-blue-700 flex items-center gap-1 transition-colors"
                 >
                   <Download className="w-3 h-3" />
                   Export
                 </button>
               )}
             </div>
-            <div className="flex-1 overflow-y-auto p-2">
+            <div className="flex-1 overflow-y-auto p-3">
               {/* Show pending matches during matching */}
               {isMatchingInProgress && pendingMatches.length > 0 && (
                 <div className="space-y-2">
-                  <div className="text-xs text-text-secondary text-center mb-2">
-                    Latest matches (live)
+                  <div className="text-xs text-text-secondary text-center mb-2 font-medium">
+                    Latest matches
                   </div>
                   {pendingMatches.map((match, idx) => (
-                    <div key={idx} className="p-3 bg-blue-50/50 border border-blue-100 rounded-lg text-sm animate-pulse">
+                    <div key={idx} className="p-3 bg-blue-50/50 border border-blue-200/50 rounded-lg text-sm animate-pulse">
                       <div className="flex items-center gap-2 mb-2">
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-text-primary truncate">{match.ledger_txn.vendor}</div>
                           <div className="text-xs text-text-secondary">{formatDate(match.ledger_txn.date)}</div>
                         </div>
-                        <ArrowLeftRight className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                        <ArrowLeftRight className="w-4 h-4 text-primary-blue flex-shrink-0" />
                         <div className="flex-1 min-w-0 text-right">
                           <div className="font-medium text-text-primary truncate">{match.bank_txn?.vendor || '-'}</div>
                           <div className="text-xs text-text-secondary">{match.bank_txn ? formatDate(match.bank_txn.date) : '-'}</div>
@@ -523,7 +576,7 @@ const Matching = () => {
                       </div>
                       <div className="flex justify-between items-center text-xs">
                         <span className="font-semibold">{formatCurrency(match.ledger_txn.amount)}</span>
-                        <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700">
+                        <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
                           {(match.confidence * 100).toFixed(0)}%
                         </span>
                         <span className="font-semibold">{match.bank_txn ? formatCurrency(match.bank_txn.amount) : '-'}</span>
@@ -537,13 +590,13 @@ const Matching = () => {
               {!isMatchingInProgress && confirmedMatches.length === 0 && (
                 <div className="text-center py-8 text-text-secondary">
                   <FileText className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                  <p className="text-sm">No matches confirmed yet</p>
+                  <p className="text-sm">No matches yet</p>
                   {stats?.pending > 0 && (
                     <button
                       onClick={handleStartReview}
-                      className="mt-3 text-sm text-primary-blue hover:underline"
+                      className="mt-3 text-sm text-primary-blue hover:underline font-medium"
                     >
-                      Start reviewing {stats.pending} pending matches
+                      Review {stats.pending} pending
                     </button>
                   )}
                 </div>
@@ -552,13 +605,13 @@ const Matching = () => {
               {!isMatchingInProgress && confirmedMatches.length > 0 && (
                 <div className="space-y-2">
                   {confirmedMatches.map((match, idx) => (
-                    <div key={idx} className="p-3 bg-green-50/50 border border-green-100 rounded-lg text-sm">
+                    <div key={idx} className="p-3 bg-blue-50/50 border border-blue-200/50 rounded-lg text-sm hover:bg-blue-50 transition-colors">
                       <div className="flex items-center gap-2 mb-2">
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-text-primary truncate">{match.ledger_txn.vendor}</div>
                           <div className="text-xs text-text-secondary">{formatDate(match.ledger_txn.date)}</div>
                         </div>
-                        <ArrowLeftRight className="w-4 h-4 text-green-500 flex-shrink-0" />
+                        <ArrowLeftRight className="w-4 h-4 text-primary-blue flex-shrink-0" />
                         <div className="flex-1 min-w-0 text-right">
                           <div className="font-medium text-text-primary truncate">{match.bank_txn.vendor}</div>
                           <div className="text-xs text-text-secondary">{formatDate(match.bank_txn.date)}</div>
@@ -566,7 +619,7 @@ const Matching = () => {
                       </div>
                       <div className="flex justify-between items-center text-xs">
                         <span className="font-semibold">{formatCurrency(match.ledger_txn.amount)}</span>
-                        <span className={`px-2 py-0.5 rounded ${match.confidence >= 0.8 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                        <span className={`px-2 py-0.5 rounded font-medium ${match.confidence >= 0.8 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                           {(match.confidence * 100).toFixed(0)}%
                         </span>
                         <span className="font-semibold">{formatCurrency(match.bank_txn.amount)}</span>
@@ -579,32 +632,33 @@ const Matching = () => {
           </div>
 
           {/* Right Column - Unmatched Bank */}
-          <div className="bg-white rounded-lg border shadow-sm overflow-hidden flex flex-col">
-            <div className="bg-purple-50 border-b border-purple-200 px-4 py-3 flex items-center justify-between">
-              <h2 className="font-semibold text-purple-800 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4" />
-                Unmatched Bank ({unmatchedBank.length})
+          <div className="rounded-2xl border border-blue-300/50 bg-white/80 backdrop-blur-sm shadow-2xl overflow-hidden flex flex-col hover:shadow-3xl transition-shadow duration-300">
+            <div className="bg-gradient-to-r from-primary-blue/10 to-blue-100/50 border-b border-blue-300/50 px-4 py-3 flex items-center justify-between">
+              <h2 className="font-bold text-text-primary flex items-center gap-2 text-sm">
+                <AlertCircle className="w-4 h-4 text-primary-blue" />
+                Unmatched Bank
+                <span className="text-text-secondary font-normal">({unmatchedBank.length})</span>
               </h2>
               {unmatchedBank.length > 0 && (
                 <button
                   onClick={() => handleExport('bank')}
-                  className="text-xs text-purple-600 hover:text-purple-800 flex items-center gap-1"
+                  className="text-xs text-primary-blue hover:text-blue-700 flex items-center gap-1 transition-colors"
                 >
                   <Download className="w-3 h-3" />
                   Export
                 </button>
               )}
             </div>
-            <div className="flex-1 overflow-y-auto p-2">
+            <div className="flex-1 overflow-y-auto p-3">
               {unmatchedBank.length === 0 ? (
                 <div className="text-center py-8 text-text-secondary">
                   <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-green-500" />
-                  <p className="text-sm">All bank items matched!</p>
+                  <p className="text-sm">All matched!</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {unmatchedBank.map((txn) => (
-                    <div key={txn.id} className="p-3 bg-purple-50/50 border border-purple-100 rounded-lg text-sm">
+                    <div key={txn.id} className="p-3 bg-blue-50/50 border border-blue-200/50 rounded-lg text-sm hover:bg-blue-50 transition-colors">
                       <div className="flex justify-between items-start mb-1">
                         <span className="font-medium text-text-primary truncate max-w-[60%]">{txn.vendor}</span>
                         <span className="font-semibold text-text-primary whitespace-nowrap">{formatCurrency(txn.amount)}</span>
@@ -622,10 +676,10 @@ const Matching = () => {
         </div>
         
         {/* Back to Import */}
-        <div className="mt-4 text-center">
+        <div className="mt-6 text-center">
           <button
             onClick={() => navigate('/import')}
-            className="text-sm text-text-secondary hover:text-primary-blue"
+            className="text-sm text-text-secondary hover:text-primary-blue transition-colors font-medium"
           >
             ← Import different files
           </button>
@@ -650,23 +704,23 @@ const Matching = () => {
       {/* Waiting for more matches modal */}
       {showReviewModal && !currentMatch && isMatchingInProgress && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-8 text-center">
+          <div className="rounded-2xl border border-blue-300/50 bg-white/95 backdrop-blur-sm shadow-2xl max-w-md w-full p-8 text-center">
             <Loader2 className="w-12 h-12 animate-spin text-primary-blue mx-auto mb-4" />
-            <h2 className="text-xl font-bold text-text-primary mb-2">Waiting for more matches...</h2>
+            <h2 className="text-xl font-bold bg-gradient-to-r from-primary-blue to-blue-600 bg-clip-text text-transparent mb-2">Waiting for more matches</h2>
             <p className="text-text-secondary mb-4">
-              You've reviewed all current matches. The AI is still finding more.
+              Reviewed all current matches. AI is finding more.
             </p>
             <p className="text-sm text-text-secondary mb-6">
-              {matchingProgress?.progress || 0} of {matchingProgress?.total || 0} transactions processed
+              {matchingProgress?.progress || 0} of {matchingProgress?.total || 0} processed
             </p>
             <button
               onClick={() => {
                 setShowReviewModal(false);
                 loadAllData();
               }}
-              className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-6 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors font-medium"
             >
-              Close and continue later
+              Close
             </button>
           </div>
         </div>

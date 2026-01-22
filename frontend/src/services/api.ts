@@ -64,6 +64,7 @@ export const runMatchingAsync = async (config: MatchingConfig): Promise<{ status
 
 export const getMatchingProgress = async (): Promise<{
   in_progress: boolean;
+  paused?: boolean;
   progress: number;
   total: number;
   matches_found: number;
@@ -72,6 +73,16 @@ export const getMatchingProgress = async (): Promise<{
   latest_matches: MatchResult[];
 }> => {
   const response = await api.get('/match/progress');
+  return response.data;
+};
+
+export const pauseMatching = async (): Promise<{ status: string }> => {
+  const response = await api.post('/match/pause');
+  return response.data;
+};
+
+export const resumeMatching = async (): Promise<{ status: string }> => {
+  const response = await api.post('/match/resume');
   return response.data;
 };
 

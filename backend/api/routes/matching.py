@@ -36,11 +36,24 @@ match_state: Dict[str, Any] = {
     'audit_trail': [],
     # Async matching state
     'matching_in_progress': False,
+    'matching_paused': False,
     'matching_progress': 0,
     'matching_total': 0,
     'matching_error': None,
 }
 match_state_lock = threading.Lock()
+
+
+def wait_if_paused():
+    """Helper function to wait if matching is paused. Returns False if matching was stopped."""
+    while True:
+        with match_state_lock:
+            if not match_state['matching_in_progress']:
+                return False  # Matching was stopped
+            if not match_state.get('matching_paused', False):
+                return True  # Not paused, continue
+        # Paused - wait before checking again
+        time.sleep(0.5)  # Check every 500ms
 
 
 def run_matching_async(config: MatchingConfig):
@@ -50,6 +63,7 @@ def run_matching_async(config: MatchingConfig):
             ledger_txns = list(match_state['normalized_ledger'])
             bank_txns = list(match_state['normalized_bank'])
             match_state['matching_in_progress'] = True
+            match_state['matching_paused'] = False
             match_state['matching_progress'] = 0
             match_state['matching_total'] = len(ledger_txns)
             match_state['matching_error'] = None
@@ -68,6 +82,10 @@ def run_matching_async(config: MatchingConfig):
         matched_bank_ids = set()
         
         for i, ledger_txn in enumerate(ledger_txns):
+            # Check if paused - wait until resumed
+            if not wait_if_paused():
+                return  # Matching was stopped
+            
             # Update progress
             with match_state_lock:
                 match_state['matching_progress'] = i + 1
@@ -79,6 +97,10 @@ def run_matching_async(config: MatchingConfig):
                 matched_bank_ids,
                 top_k=5
             )
+            
+            # Check pause status again after heuristics (before expensive LLM call)
+            if not wait_if_paused():
+                return  # Matching was stopped
             
             if not candidates:
                 result_entry = {
@@ -94,12 +116,22 @@ def run_matching_async(config: MatchingConfig):
                     match_state['unmatched_results'].append(result_entry)
                 continue
             
+            # Check pause status again before expensive LLM call
+            if not wait_if_paused():
+                return  # Matching was stopped
+            
             # Step 2: LLM selects best match and explains
+            # Note: This is an expensive operation that can't be interrupted once started,
+            # but we've checked pause status right before it
             selected_idx, explanation, confidence = select_best_match(
                 ledger_txn, 
                 candidates,
                 engine.get_config()
             )
+            
+            # Check pause status again after LLM call
+            if not wait_if_paused():
+                return  # Matching was stopped
             
             if selected_idx is not None:
                 selected = candidates[selected_idx]
@@ -156,6 +188,9 @@ async def run_matching_async_endpoint(request: RunMatchingRequest):
             raise HTTPException(status_code=400, detail="No transactions loaded. Please import files first.")
         
         if match_state['matching_in_progress']:
+            # If paused, allow resume via separate endpoint
+            if match_state.get('matching_paused', False):
+                raise HTTPException(status_code=400, detail="Matching is paused. Use /resume to continue.")
             return {
                 "status": "already_running",
                 "progress": match_state['matching_progress'],
@@ -179,6 +214,7 @@ async def get_matching_progress():
     with match_state_lock:
         return {
             "in_progress": match_state['matching_in_progress'],
+            "paused": match_state.get('matching_paused', False),
             "progress": match_state['matching_progress'],
             "total": match_state['matching_total'],
             "matches_found": len(match_state['match_results']),
@@ -187,6 +223,28 @@ async def get_matching_progress():
             # Include latest results for real-time display
             "latest_matches": match_state['match_results'][-5:] if match_state['match_results'] else [],
         }
+
+
+@router.post("/pause")
+async def pause_matching():
+    """Pause the matching process."""
+    with match_state_lock:
+        if not match_state['matching_in_progress']:
+            raise HTTPException(status_code=400, detail="Matching is not in progress")
+        match_state['matching_paused'] = True
+    return {"status": "paused"}
+
+
+@router.post("/resume")
+async def resume_matching():
+    """Resume the matching process from where it was paused."""
+    with match_state_lock:
+        if not match_state['matching_in_progress']:
+            raise HTTPException(status_code=400, detail="Matching is not in progress")
+        if not match_state.get('matching_paused', False):
+            raise HTTPException(status_code=400, detail="Matching is not paused")
+        match_state['matching_paused'] = False
+    return {"status": "resumed"}
 
 
 @router.post("/run")
