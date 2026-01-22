@@ -31,6 +31,11 @@ const Layout = ({ children }: LayoutProps) => {
             <div className="flex justify-between h-16">
               <div className="flex">
                 <div className="flex-shrink-0 flex items-center">
+                  <img 
+                    src="/small_logo.png" 
+                    alt="MatchingAI Logo" 
+                    className="h-8 w-auto mr-2"
+                  />
                   <h1 className="text-xl font-bold text-primary-blue">MatchingAI</h1>
                 </div>
                 <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
