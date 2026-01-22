@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { FileText, Search, AlertTriangle, Download, Home } from 'lucide-react';
+import { FileText, GitMerge, Home } from 'lucide-react';
 
 interface LayoutProps {
   children: ReactNode;
@@ -12,9 +12,7 @@ const Layout = ({ children }: LayoutProps) => {
   const navItems = [
     { path: '/', label: 'Home', icon: Home },
     { path: '/import', label: 'Import', icon: FileText },
-    { path: '/review', label: 'Review', icon: Search },
-    { path: '/exceptions', label: 'Exceptions', icon: AlertTriangle },
-    { path: '/export', label: 'Export', icon: Download },
+    { path: '/matching', label: 'Matching', icon: GitMerge },
   ];
 
   const isActive = (path: string) => {

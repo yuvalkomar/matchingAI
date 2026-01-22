@@ -1,12 +1,10 @@
 import { Link } from 'react-router-dom';
-import { FileText, Search, AlertTriangle, Download, ArrowRight } from 'lucide-react';
+import { FileText, GitMerge, ArrowRight } from 'lucide-react';
 
 const Landing = () => {
   const steps = [
-    { icon: FileText, label: 'Import', description: 'Upload your ledger and bank files' },
-    { icon: Search, label: 'Review', description: 'Review AI-suggested matches' },
-    { icon: AlertTriangle, label: 'Exceptions', description: 'Handle unmatched transactions' },
-    { icon: Download, label: 'Export', description: 'Download your results' },
+    { icon: FileText, label: 'Import', description: 'Upload your ledger and bank files, map columns' },
+    { icon: GitMerge, label: 'Match & Review', description: 'View matches, review suggestions, export results' },
   ];
 
   return (
@@ -23,23 +21,23 @@ const Landing = () => {
         </div>
 
         {/* Workflow Steps */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12 max-w-2xl mx-auto">
           {steps.map((step, index) => {
             const Icon = step.icon;
             return (
               <div key={index} className="relative">
-                <div className="card text-center">
+                <div className="card text-center py-8">
                   <div className="flex justify-center mb-4">
                     <div className="w-16 h-16 bg-primary-blue rounded-full flex items-center justify-center">
                       <Icon className="w-8 h-8 text-white" />
                     </div>
                   </div>
-                  <h3 className="font-semibold text-text-primary mb-2">{step.label}</h3>
+                  <h3 className="font-semibold text-text-primary mb-2 text-lg">{step.label}</h3>
                   <p className="text-sm text-text-secondary">{step.description}</p>
                 </div>
                 {index < steps.length - 1 && (
-                  <div className="hidden md:block absolute top-1/2 -right-3 transform -translate-y-1/2 translate-x-1/2">
-                    <ArrowRight className="w-6 h-6 text-primary-gold" />
+                  <div className="hidden md:block absolute top-1/2 -right-4 transform -translate-y-1/2 translate-x-1/2">
+                    <ArrowRight className="w-8 h-8 text-primary-gold" />
                   </div>
                 )}
               </div>

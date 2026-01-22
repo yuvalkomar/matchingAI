@@ -161,13 +161,26 @@ const Review = () => {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="card text-center">
-          <p className="text-text-secondary">No matches to review.</p>
-          <button
-            onClick={() => navigate('/import')}
-            className="btn-primary mt-4"
-          >
-            Go to Import
-          </button>
+          <h2 className="text-xl font-bold text-text-primary mb-2">No Matches to Review</h2>
+          <p className="text-text-secondary mb-4">
+            The AI couldn't find any confident matches for your transactions.
+            <br />
+            You can check the Exceptions page for unmatched items and adjust matching rules.
+          </p>
+          <div className="flex gap-4 justify-center">
+            <button
+              onClick={() => navigate('/exceptions')}
+              className="btn-secondary"
+            >
+              Review Exceptions
+            </button>
+            <button
+              onClick={() => navigate('/import')}
+              className="btn-primary"
+            >
+              Import New Files
+            </button>
+          </div>
         </div>
       </div>
     );

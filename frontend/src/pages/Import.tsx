@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import UploadOrPreview from '../components/UploadOrPreview';
 import ColumnMapping from '../components/ColumnMapping';
 import { FileUploadResponse, ColumnMapping as ColumnMappingType } from '../types';
-import { autoMapColumns, processFiles, setTransactions, runMatching } from '../services/api';
+import { autoMapColumns, processFiles, setTransactions, runMatchingAsync } from '../services/api';
 import { ArrowRight } from 'lucide-react';
 
 const Import = () => {
@@ -98,21 +98,22 @@ const Import = () => {
       // Set transactions in backend
       await setTransactions(response.normalized_ledger, response.normalized_bank);
 
-      // Automatically run matching
+      // Start async matching (runs in background)
       const matchingConfig = {
         vendor_threshold: 0.80,
         amount_tolerance: 0.01,
         date_window: 3,
         require_reference: false,
       };
-      await runMatching(matchingConfig);
+      await runMatchingAsync(matchingConfig);
 
-      navigate('/review');
+      // Navigate immediately - matching will continue in background
+      navigate('/matching');
     } catch (error: any) {
       alert(`Processing failed: ${error.response?.data?.detail || error.message}`);
-    } finally {
       setIsProcessing(false);
     }
+    // Don't set isProcessing to false - we're navigating away
   };
 
   const canProcess = ledgerFile && bankFile && validateMapping(ledgerMapping) && validateMapping(bankMapping);

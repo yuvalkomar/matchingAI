@@ -55,6 +55,26 @@ export const runMatching = async (config: MatchingConfig): Promise<{ total_match
   return response.data;
 };
 
+export const runMatchingAsync = async (config: MatchingConfig): Promise<{ status: string; total: number }> => {
+  const response = await api.post('/match/run-async', {
+    config,
+  });
+  return response.data;
+};
+
+export const getMatchingProgress = async (): Promise<{
+  in_progress: boolean;
+  progress: number;
+  total: number;
+  matches_found: number;
+  unmatched_count: number;
+  error: string | null;
+  latest_matches: MatchResult[];
+}> => {
+  const response = await api.get('/match/progress');
+  return response.data;
+};
+
 export const getNextMatch = async (): Promise<{ done: boolean; match_index: number; total: number; match: MatchResult } | { done: true; message: string }> => {
   const response = await api.get('/match/next');
   return response.data;

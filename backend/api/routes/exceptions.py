@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/exceptions", tags=["exceptions"])
 
 @router.get("/unmatched-ledger")
 async def get_unmatched_ledger():
-    """Get unmatched ledger transactions."""
+    """Get unmatched ledger transactions (including those AI couldn't match)."""
     from backend.api.routes.matching import match_state_lock
 
     with match_state_lock:
@@ -26,6 +26,9 @@ async def get_unmatched_ledger():
             matched_ids_raw = match_state['matched_ledger_ids']
         matched_ids_snapshot = set(matched_ids_raw)
         all_ledger_snapshot = list(match_state['normalized_ledger'])
+        
+        # Also get transactions where AI couldn't find a match (with their explanations)
+        unmatched_results = list(match_state.get('unmatched_results', []))
 
     unmatched = [
         txn for txn in all_ledger_snapshot
@@ -35,6 +38,7 @@ async def get_unmatched_ledger():
     return {
         "count": len(unmatched),
         "transactions": unmatched,
+        "ai_unmatched": unmatched_results,  # Includes AI explanation for why no match was found
     }
 
 

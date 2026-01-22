@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional
 import sys
 import os
 import threading
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
 
@@ -14,7 +15,7 @@ from backend.api.models import (
     Transaction, MatchingConfig
 )
 from matching.engine import MatchingEngine
-from matching.llm_helper import evaluate_match_batch
+from matching.llm_helper import evaluate_match_batch, select_best_match
 
 router = APIRouter(prefix="/api/match", tags=["matching"])
 
@@ -24,6 +25,7 @@ match_state: Dict[str, Any] = {
     'normalized_ledger': [],
     'normalized_bank': [],
     'match_results': [],
+    'unmatched_results': [],  # Ledger transactions with no match found
     'current_index': 0,
     'confirmed_matches': [],
     'rejected_matches': [],
@@ -32,8 +34,154 @@ match_state: Dict[str, Any] = {
     'matched_bank_ids': set(),
     'matched_ledger_ids': set(),
     'audit_trail': [],
+    # Async matching state
+    'matching_in_progress': False,
+    'matching_progress': 0,
+    'matching_total': 0,
+    'matching_error': None,
 }
 match_state_lock = threading.Lock()
+
+
+def run_matching_async(config: MatchingConfig):
+    """Background thread function to run matching progressively."""
+    try:
+        with match_state_lock:
+            ledger_txns = list(match_state['normalized_ledger'])
+            bank_txns = list(match_state['normalized_bank'])
+            match_state['matching_in_progress'] = True
+            match_state['matching_progress'] = 0
+            match_state['matching_total'] = len(ledger_txns)
+            match_state['matching_error'] = None
+            # Reset results
+            match_state['match_results'] = []
+            match_state['unmatched_results'] = []
+            match_state['current_index'] = 0
+        
+        engine = MatchingEngine(
+            vendor_threshold=config.vendor_threshold,
+            amount_tolerance=config.amount_tolerance,
+            date_window=config.date_window,
+            require_reference=config.require_reference
+        )
+        
+        matched_bank_ids = set()
+        
+        for i, ledger_txn in enumerate(ledger_txns):
+            # Update progress
+            with match_state_lock:
+                match_state['matching_progress'] = i + 1
+            
+            # Step 1: Heuristics find top candidates
+            candidates = engine.find_candidates(
+                ledger_txn, 
+                bank_txns, 
+                matched_bank_ids,
+                top_k=5
+            )
+            
+            if not candidates:
+                result_entry = {
+                    'ledger_txn': ledger_txn,
+                    'bank_txn': None,
+                    'confidence': 0.0,
+                    'heuristic_score': 0.0,
+                    'llm_explanation': "No candidates found by heuristics",
+                    'component_scores': {},
+                    'candidates': [],
+                }
+                with match_state_lock:
+                    match_state['unmatched_results'].append(result_entry)
+                continue
+            
+            # Step 2: LLM selects best match and explains
+            selected_idx, explanation, confidence = select_best_match(
+                ledger_txn, 
+                candidates,
+                engine.get_config()
+            )
+            
+            if selected_idx is not None:
+                selected = candidates[selected_idx]
+                matched_bank_ids.add(selected.bank_txn['id'])
+                
+                result_entry = {
+                    'ledger_txn': ledger_txn,
+                    'bank_txn': selected.bank_txn,
+                    'confidence': confidence,
+                    'heuristic_score': selected.score,
+                    'llm_explanation': explanation,
+                    'component_scores': selected.component_scores,
+                    'candidates': [c.__dict__ if hasattr(c, '__dict__') else c for c in candidates],
+                }
+                with match_state_lock:
+                    match_state['match_results'].append(result_entry)
+                    # Sort by confidence after each addition
+                    match_state['match_results'].sort(key=lambda r: r['confidence'], reverse=True)
+            else:
+                result_entry = {
+                    'ledger_txn': ledger_txn,
+                    'bank_txn': None,
+                    'confidence': confidence,
+                    'heuristic_score': candidates[0].score if candidates else 0.0,
+                    'llm_explanation': explanation,
+                    'component_scores': {},
+                    'candidates': [c.__dict__ if hasattr(c, '__dict__') else c for c in candidates],
+                }
+                with match_state_lock:
+                    match_state['unmatched_results'].append(result_entry)
+        
+        with match_state_lock:
+            match_state['matching_in_progress'] = False
+            
+    except Exception as e:
+        with match_state_lock:
+            match_state['matching_in_progress'] = False
+            match_state['matching_error'] = str(e)
+
+
+@router.post("/run-async")
+async def run_matching_async_endpoint(request: RunMatchingRequest):
+    """Start matching algorithm asynchronously. Returns immediately, poll /progress for updates."""
+    with match_state_lock:
+        ledger_txns = match_state['normalized_ledger']
+        bank_txns = match_state['normalized_bank']
+        
+        if not ledger_txns or not bank_txns:
+            raise HTTPException(status_code=400, detail="No transactions loaded. Please import files first.")
+        
+        if match_state['matching_in_progress']:
+            return {
+                "status": "already_running",
+                "progress": match_state['matching_progress'],
+                "total": match_state['matching_total'],
+            }
+    
+    # Start background thread
+    thread = threading.Thread(target=run_matching_async, args=(request.config,))
+    thread.daemon = True
+    thread.start()
+    
+    return {
+        "status": "started",
+        "total": len(ledger_txns),
+    }
+
+
+@router.get("/progress")
+async def get_matching_progress():
+    """Get current matching progress and partial results."""
+    with match_state_lock:
+        return {
+            "in_progress": match_state['matching_in_progress'],
+            "progress": match_state['matching_progress'],
+            "total": match_state['matching_total'],
+            "matches_found": len(match_state['match_results']),
+            "unmatched_count": len(match_state['unmatched_results']),
+            "error": match_state['matching_error'],
+            # Include latest results for real-time display
+            "latest_matches": match_state['match_results'][-5:] if match_state['match_results'] else [],
+        }
 
 
 @router.post("/run")
@@ -61,13 +209,14 @@ async def run_matching(request: RunMatchingRequest):
         # Convert to response format
         # Ensure all required Transaction fields are preserved (source, original_row)
         match_results = []
+        unmatched_results = []
         for r in results:
             ledger_txn = r['ledger_txn'].copy()  # Preserve all fields including source and original_row
             bank_txn = r.get('bank_txn')
             if bank_txn:
                 bank_txn = bank_txn.copy()  # Preserve all fields including source and original_row
             
-            match_results.append({
+            result_entry = {
                 'ledger_txn': ledger_txn,
                 'bank_txn': bank_txn,
                 'confidence': r.get('confidence', 0.0),
@@ -75,16 +224,25 @@ async def run_matching(request: RunMatchingRequest):
                 'llm_explanation': r.get('llm_explanation', ''),
                 'component_scores': r.get('component_scores', {}),
                 'candidates': [c.__dict__ if hasattr(c, '__dict__') else c for c in r.get('candidates', [])],
-            })
+            }
+            
+            # Only add to review queue if a match was found
+            # Transactions without matches go directly to exceptions (unmatched)
+            if bank_txn is not None:
+                match_results.append(result_entry)
+            else:
+                unmatched_results.append(result_entry)
         
         # Update state with thread-safe access
         with match_state_lock:
             match_state['match_results'] = match_results
+            match_state['unmatched_results'] = unmatched_results
             match_state['current_index'] = 0
         
         return {
             "total_matches": len(match_results),
-            "matches_found": sum(1 for r in match_results if r['bank_txn'] is not None),
+            "total_unmatched": len(unmatched_results),
+            "matches_found": len(match_results),
             "results": match_results,
         }
     except Exception as e:
@@ -209,6 +367,7 @@ async def set_transactions(request: Dict[str, Any]):
         match_state['normalized_bank'] = bank
         # Reset match state - ensure sets are always sets
         match_state['match_results'] = []
+        match_state['unmatched_results'] = []  # Reset unmatched results
         match_state['current_index'] = 0
         match_state['confirmed_matches'] = []
         match_state['rejected_matches'] = []
@@ -231,6 +390,7 @@ async def get_stats():
             "duplicates": len(match_state['flagged_duplicates']),
             "skipped": len(match_state['skipped_matches']),
             "pending": len(match_state['match_results']) - match_state['current_index'],
+            "unmatched": len(match_state.get('unmatched_results', [])),
             "total_ledger": len(match_state['normalized_ledger']),
             "total_bank": len(match_state['normalized_bank']),
         }
