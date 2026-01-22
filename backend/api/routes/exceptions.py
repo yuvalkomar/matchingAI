@@ -30,9 +30,13 @@ async def get_unmatched_ledger():
         # Also get transactions where AI couldn't find a match (with their explanations)
         unmatched_results = list(match_state.get('unmatched_results', []))
 
+    # Get IDs from unmatched_results to avoid duplicates
+    unmatched_result_ids = {result['ledger_txn']['id'] for result in unmatched_results}
+
+    # Filter unmatched transactions, excluding those already in unmatched_results
     unmatched = [
         txn for txn in all_ledger_snapshot
-        if txn['id'] not in matched_ids_snapshot
+        if txn['id'] not in matched_ids_snapshot and txn['id'] not in unmatched_result_ids
     ]
 
     return {
