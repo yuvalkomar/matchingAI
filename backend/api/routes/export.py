@@ -47,7 +47,10 @@ def transactions_to_csv(transactions: List[Dict]) -> str:
 @router.get("/matches")
 async def export_matches():
     """Export confirmed matches as CSV."""
-    matches = match_state['confirmed_matches']
+    from backend.api.routes.matching import match_state_lock
+    
+    with match_state_lock:
+        matches = match_state['confirmed_matches']
     
     if not matches:
         return Response(
@@ -107,10 +110,15 @@ async def export_matches():
 @router.get("/unmatched-ledger")
 async def export_unmatched_ledger():
     """Export unmatched ledger transactions as CSV."""
-    matched_ids = match_state['matched_ledger_ids']
-    if not isinstance(matched_ids, set):
-        matched_ids = set(matched_ids) if matched_ids else set()
-    all_ledger = match_state['normalized_ledger']
+    from backend.api.routes.matching import match_state_lock
+    
+    with match_state_lock:
+        matched_ids = match_state['matched_ledger_ids']
+        # Ensure it's always a set
+        if not isinstance(matched_ids, set):
+            match_state['matched_ledger_ids'] = set(matched_ids) if matched_ids else set()
+            matched_ids = match_state['matched_ledger_ids']
+        all_ledger = match_state['normalized_ledger']
     
     unmatched = [
         txn for txn in all_ledger
@@ -129,10 +137,15 @@ async def export_unmatched_ledger():
 @router.get("/unmatched-bank")
 async def export_unmatched_bank():
     """Export unmatched bank transactions as CSV."""
-    matched_ids = match_state['matched_bank_ids']
-    if not isinstance(matched_ids, set):
-        matched_ids = set(matched_ids) if matched_ids else set()
-    all_bank = match_state['normalized_bank']
+    from backend.api.routes.matching import match_state_lock
+    
+    with match_state_lock:
+        matched_ids = match_state['matched_bank_ids']
+        # Ensure it's always a set
+        if not isinstance(matched_ids, set):
+            match_state['matched_bank_ids'] = set(matched_ids) if matched_ids else set()
+            matched_ids = match_state['matched_bank_ids']
+        all_bank = match_state['normalized_bank']
     
     unmatched = [
         txn for txn in all_bank
@@ -151,19 +164,35 @@ async def export_unmatched_bank():
 @router.get("/audit")
 async def export_audit_trail():
     """Export audit trail as JSON."""
-    audit_trail = match_state['audit_trail']
+    from backend.api.routes.matching import match_state_lock
+    
+    with match_state_lock:
+        audit_trail = match_state['audit_trail']
+        
+        # Ensure matched IDs are sets
+        matched_ledger_ids = match_state['matched_ledger_ids']
+        matched_bank_ids = match_state['matched_bank_ids']
+        if not isinstance(matched_ledger_ids, set):
+            match_state['matched_ledger_ids'] = set(matched_ledger_ids) if matched_ledger_ids else set()
+            matched_ledger_ids = match_state['matched_ledger_ids']
+        if not isinstance(matched_bank_ids, set):
+            match_state['matched_bank_ids'] = set(matched_bank_ids) if matched_bank_ids else set()
+            matched_bank_ids = match_state['matched_bank_ids']
+        
+        normalized_ledger = match_state['normalized_ledger']
+        normalized_bank = match_state['normalized_bank']
     
     export_data = {
         'export_timestamp': datetime.now().isoformat(),
         'summary': {
-            'total_ledger_transactions': len(match_state['normalized_ledger']),
-            'total_bank_transactions': len(match_state['normalized_bank']),
+            'total_ledger_transactions': len(normalized_ledger),
+            'total_bank_transactions': len(normalized_bank),
             'confirmed_matches': len(match_state['confirmed_matches']),
             'rejected_matches': len(match_state['rejected_matches']),
             'flagged_duplicates': len(match_state['flagged_duplicates']),
             'skipped_matches': len(match_state['skipped_matches']),
-            'unmatched_ledger': len([t for t in match_state['normalized_ledger'] if t['id'] not in (match_state['matched_ledger_ids'] if isinstance(match_state['matched_ledger_ids'], set) else set(match_state.get('matched_ledger_ids', [])))]),
-            'unmatched_bank': len([t for t in match_state['normalized_bank'] if t['id'] not in (match_state['matched_bank_ids'] if isinstance(match_state['matched_bank_ids'], set) else set(match_state.get('matched_bank_ids', [])))]),
+            'unmatched_ledger': len([t for t in normalized_ledger if t['id'] not in matched_ledger_ids]),
+            'unmatched_bank': len([t for t in normalized_bank if t['id'] not in matched_bank_ids]),
         },
         'decisions': audit_trail,
     }

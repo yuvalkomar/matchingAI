@@ -7,6 +7,8 @@ import sys
 import os
 import asyncio
 import concurrent.futures
+import threading
+import time
 
 # Add parent directory to path to import matching module
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
@@ -23,7 +25,11 @@ def get_auto_match_columns():
 router = APIRouter(prefix="/api/import", tags=["import"])
 
 # In-memory storage (in production, use database or Redis)
+# Thread-safe storage with lock and automatic cleanup
 file_storage: Dict[str, Any] = {}
+file_storage_lock = threading.Lock()
+FILE_STORAGE_MAX_AGE_SECONDS = 3600  # 1 hour
+FILE_STORAGE_MAX_SIZE = 100  # Maximum number of files to store
 
 
 @router.post("/upload")
@@ -80,14 +86,19 @@ async def upload_file(file: UploadFile = File(...)):
                 detail=f"File processing timed out after 15 seconds. File size: {file_size} bytes."
             )
         
-        # Store file data
+        # Store file data with thread-safe access
         file_id = f"{file.filename}_{id(content)}"
-        file_storage[file_id] = {
-            'filename': file.filename,
-            'df': df,
-            'columns': list(df.columns),
-            'sample_data': sample_data,
-        }
+        with file_storage_lock:
+            # Cleanup old files if storage is getting too large
+            _cleanup_file_storage()
+            
+            file_storage[file_id] = {
+                'filename': file.filename,
+                'df': df,
+                'columns': list(df.columns),
+                'sample_data': sample_data,
+                'created_at': time.time(),
+            }
         
         total_time = time.time() - start_time
         print(f"[UPLOAD] Complete: {file_id}, total time: {total_time:.2f}s")
@@ -109,13 +120,39 @@ async def upload_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Error processing file: {str(e)}")
 
 
+def _cleanup_file_storage():
+    """Remove old files from storage to prevent memory leaks."""
+    current_time = time.time()
+    keys_to_remove = []
+    
+    # Remove files older than max age
+    for file_id, file_data in file_storage.items():
+        created_at = file_data.get('created_at', 0)
+        if current_time - created_at > FILE_STORAGE_MAX_AGE_SECONDS:
+            keys_to_remove.append(file_id)
+    
+    # If still too many files, remove oldest ones
+    if len(file_storage) - len(keys_to_remove) >= FILE_STORAGE_MAX_SIZE:
+        remaining = [(fid, file_storage[fid].get('created_at', 0)) 
+                     for fid in file_storage.keys() if fid not in keys_to_remove]
+        remaining.sort(key=lambda x: x[1])  # Sort by creation time
+        # Remove oldest files until we're under the limit
+        excess = len(remaining) - FILE_STORAGE_MAX_SIZE + len(keys_to_remove) + 1
+        keys_to_remove.extend([fid for fid, _ in remaining[:excess]])
+    
+    # Remove files
+    for file_id in keys_to_remove:
+        del file_storage[file_id]
+
+
 @router.post("/auto-map")
 async def auto_map_columns(file_id: str = Query(...), timeout: int = Query(10)):
     """Use AI to automatically map columns."""
-    if file_id not in file_storage:
-        raise HTTPException(status_code=404, detail="File not found")
-    
-    file_data = file_storage[file_id]
+    with file_storage_lock:
+        if file_id not in file_storage:
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        file_data = file_storage[file_id]
     columns = file_data['columns']
     sample_data = file_data['sample_data']
     
@@ -157,13 +194,14 @@ async def process_files(request: Dict[str, Any]):
     ledger_mapping = request.get('ledger_mapping', {})
     bank_mapping = request.get('bank_mapping', {})
     
-    if not ledger_file_id or ledger_file_id not in file_storage:
-        raise HTTPException(status_code=404, detail="Ledger file not found")
-    if not bank_file_id or bank_file_id not in file_storage:
-        raise HTTPException(status_code=404, detail="Bank file not found")
-    
-    ledger_df = file_storage[ledger_file_id]['df']
-    bank_df = file_storage[bank_file_id]['df']
+    with file_storage_lock:
+        if not ledger_file_id or ledger_file_id not in file_storage:
+            raise HTTPException(status_code=404, detail="Ledger file not found")
+        if not bank_file_id or bank_file_id not in file_storage:
+            raise HTTPException(status_code=404, detail="Bank file not found")
+        
+        ledger_df = file_storage[ledger_file_id]['df']
+        bank_df = file_storage[bank_file_id]['df']
     
     # Convert ColumnMapping to dict format expected by normalize_transactions
     ledger_map_dict = {
@@ -202,10 +240,11 @@ async def process_files(request: Dict[str, Any]):
 @router.get("/file/{file_id}")
 async def get_file_info(file_id: str):
     """Get information about an uploaded file."""
-    if file_id not in file_storage:
-        raise HTTPException(status_code=404, detail="File not found")
-    
-    file_data = file_storage[file_id]
+    with file_storage_lock:
+        if file_id not in file_storage:
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        file_data = file_storage[file_id]
     return {
         "file_id": file_id,
         "filename": file_data['filename'],

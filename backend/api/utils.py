@@ -42,10 +42,17 @@ def normalize_transactions(df: pd.DataFrame, mapping: Dict[str, Any], source: st
     """Normalize dataframe to common transaction format."""
     transactions = []
     
+    # Validate required mappings
+    required_fields = ['date', 'vendor', 'description']
+    for field in required_fields:
+        if not mapping.get(field):
+            raise ValueError(f"Required field '{field}' is not mapped. Please select a column for {field}.")
+    
     for idx, row in df.iterrows():
         try:
-            # Parse date
-            date_val = row[mapping['date']]
+            # Parse date - validated above to be not None
+            date_col = mapping['date']
+            date_val = row[date_col]
             if isinstance(date_val, str):
                 for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%Y/%m/%d']:
                     try:
@@ -90,11 +97,15 @@ def normalize_transactions(df: pd.DataFrame, mapping: Dict[str, Any], source: st
                 txn_type = 'money_out'
                 amount_val = 0.0
             
+            # Access vendor and description - validated above to be not None
+            vendor_col = mapping['vendor']
+            desc_col = mapping['description']
+            
             transaction = {
                 'id': str(uuid.uuid4())[:8],
                 'date': pd.to_datetime(date_val).isoformat(),
-                'vendor': str(row[mapping['vendor']]).strip(),
-                'description': str(row[mapping['description']]).strip(),
+                'vendor': str(row[vendor_col]).strip(),
+                'description': str(row[desc_col]).strip(),
                 'amount': float(amount_val),
                 'txn_type': txn_type,
                 'reference': str(row[mapping['reference']]).strip() if mapping.get('reference') and pd.notna(row[mapping['reference']]) else None,
