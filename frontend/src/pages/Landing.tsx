@@ -33,10 +33,10 @@ const Landing = () => {
             {steps.map((step, index) => {
               const Icon = step.icon;
               return (
-                <div key={index} className="relative group">
-                  <div className="bg-white rounded-xl border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 text-center py-6 px-5 hover:-translate-y-1">
+                <div key={index} className="relative">
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-lg text-center py-6 px-5">
                     <div className="flex justify-center mb-4">
-                      <div className="w-16 h-16 bg-gradient-to-br from-primary-blue to-blue-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                      <div className="w-16 h-16 bg-gradient-to-br from-primary-blue to-blue-600 rounded-2xl flex items-center justify-center shadow-lg">
                         <Icon className="w-8 h-8 text-white" />
                       </div>
                     </div>

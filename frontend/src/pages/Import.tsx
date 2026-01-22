@@ -119,19 +119,57 @@ const Import = () => {
   const canProcess = ledgerFile && bankFile && validateMapping(ledgerMapping) && validateMapping(bankMapping);
 
   return (
-    <div className="min-h-screen bg-blue-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="mb-4">
-          <h1 className="text-2xl font-bold text-text-primary mb-1">Import Data</h1>
-          <p className="text-sm text-text-secondary">
-            Upload your company ledger and bank transaction files, then map the columns.
-          </p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-200 via-blue-100 to-blue-200">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="mb-4 flex items-start justify-between">
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-primary-blue to-blue-600 bg-clip-text text-transparent mb-1">
+              Import Data
+            </h1>
+            <p className="text-sm text-text-secondary">
+              Upload your company ledger and bank transaction files, then map the columns.
+            </p>
+          </div>
+          {/* Continue button in upper-right */}
+          {(ledgerFile || bankFile) && (
+            <div className="flex-shrink-0 flex flex-col items-end">
+              {isProcessing ? (
+                <div className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-primary-gold/80 to-yellow-500/80 text-primary-blue font-bold text-base shadow-lg">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-blue" />
+                  Processing...
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={handleProcess}
+                    disabled={!canProcess}
+                    className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-base shadow-lg transition-all duration-300 ${
+                      canProcess
+                        ? 'bg-gradient-to-r from-primary-gold to-yellow-500 text-primary-blue hover:shadow-xl hover:scale-105 cursor-pointer'
+                        : 'bg-gradient-to-r from-primary-gold/40 to-yellow-500/40 text-primary-blue/60 cursor-not-allowed opacity-60'
+                    }`}
+                  >
+                    Continue
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                  {!canProcess && (
+                    <p className="text-xs text-text-secondary mt-1 text-right whitespace-nowrap">
+                      Please map all required (*) columns below
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Ledger Section */}
-        <div className="rounded-lg border-2 border-blue-200 bg-blue-50/90 shadow-md p-4 flex flex-col gap-3">
-          <h2 className="text-lg font-semibold text-text-primary">📄 Company Ledger</h2>
+        <div className="rounded-2xl border border-blue-300/50 bg-white/80 backdrop-blur-sm shadow-2xl p-6 flex flex-col gap-4 hover:shadow-3xl transition-shadow duration-300">
+          <h2 className="text-xl font-bold text-text-primary flex items-center gap-2">
+            <span className="text-2xl">📄</span>
+            Company Ledger
+          </h2>
           <UploadOrPreview
             label="Company Ledger"
             file={ledgerFile}
@@ -156,8 +194,11 @@ const Import = () => {
         </div>
 
         {/* Bank Section */}
-        <div className="rounded-lg border-2 border-blue-200 bg-blue-50/90 shadow-md p-4 flex flex-col gap-3">
-          <h2 className="text-lg font-semibold text-text-primary">🏦 Bank Transactions</h2>
+        <div className="rounded-2xl border border-blue-300/50 bg-white/80 backdrop-blur-sm shadow-2xl p-6 flex flex-col gap-4 hover:shadow-3xl transition-shadow duration-300">
+          <h2 className="text-xl font-bold text-text-primary flex items-center gap-2">
+            <span className="text-2xl">🏦</span>
+            Bank Transactions
+          </h2>
           <UploadOrPreview
             label="Bank Transactions"
             file={bankFile}
@@ -181,30 +222,6 @@ const Import = () => {
           )}
         </div>
         </div>
-
-        {/* Gold box: error message or Continue CTA */}
-        {(ledgerFile || bankFile) && (
-          <div className="flex justify-center mt-4">
-            {canProcess && !isProcessing ? (
-              <button
-                onClick={handleProcess}
-                className="flex items-center justify-center gap-2 px-6 py-3 rounded-lg border-2 border-primary-gold bg-primary-gold text-primary-blue font-semibold text-base hover:bg-opacity-90 transition-opacity"
-              >
-                Continue
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            ) : isProcessing ? (
-              <div className="flex items-center justify-center gap-2 px-6 py-3 rounded-lg border-2 border-primary-gold bg-primary-gold/80 text-primary-blue font-semibold text-base">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-blue" />
-                Processing...
-              </div>
-            ) : (
-              <div className="px-6 py-3 rounded-lg border-2 border-primary-gold bg-primary-gold/80 text-primary-blue font-medium text-sm text-center">
-                To continue, you must map all required columns (*) for both files
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
