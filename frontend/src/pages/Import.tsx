@@ -181,32 +181,27 @@ const Import = () => {
         </div>
         </div>
 
-        {/* Process Button */}
-        <div className="flex justify-center mt-4">
-          <button
-            onClick={handleProcess}
-            disabled={!canProcess || isProcessing}
-            className={`btn-primary text-base px-6 py-3 ${!canProcess ? 'opacity-50 cursor-not-allowed' : ''}`}
-          >
-            {isProcessing ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-blue mr-2"></div>
+        {/* Gold box: error message or Continue CTA */}
+        {(ledgerFile || bankFile) && (
+          <div className="flex justify-center mt-4">
+            {canProcess && !isProcessing ? (
+              <button
+                onClick={handleProcess}
+                className="flex items-center justify-center gap-2 px-6 py-3 rounded-lg border-2 border-primary-gold bg-primary-gold text-primary-blue font-semibold text-base hover:bg-opacity-90 transition-opacity"
+              >
+                Continue
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : isProcessing ? (
+              <div className="flex items-center justify-center gap-2 px-6 py-3 rounded-lg border-2 border-primary-gold bg-primary-gold/80 text-primary-blue font-semibold text-base">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-blue" />
                 Processing...
-              </>
+              </div>
             ) : (
-              <>
-                Process & Start Matching
-                <ArrowRight className="w-4 h-4 ml-2 inline" />
-              </>
+              <div className="px-6 py-3 rounded-lg border-2 border-primary-gold bg-primary-gold/80 text-primary-blue font-medium text-sm text-center">
+                To continue, you must map all required columns (*) for both files
+              </div>
             )}
-          </button>
-        </div>
-
-        {!canProcess && (ledgerFile || bankFile) && (
-          <div className="mt-3 text-center">
-            <p className="text-xs text-warning">
-              ⚠️ Please map all required columns (*) for both files to continue
-            </p>
           </div>
         )}
       </div>

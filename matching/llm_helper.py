@@ -41,7 +41,7 @@ def normalize_vendor_name(vendor: str) -> Tuple[str, bool]:
         (normalized_name, success)
         If LLM fails, returns original vendor name.
     """
-    if not is_llm_available():
+    if not is_llm_configured():
         return vendor, False
     
     try:
@@ -91,7 +91,7 @@ def compute_semantic_similarity(desc1: str, desc2: str) -> Tuple[float, bool]:
         (similarity_score, success)
         If LLM fails, returns 0.0.
     """
-    if not is_llm_available():
+    if not is_llm_configured():
         return 0.0, False
     
     try:
@@ -149,7 +149,7 @@ def enhance_match_explanation(
     Returns:
         (enhanced_explanations, success)
     """
-    if not is_llm_available():
+    if not is_llm_configured():
         return base_explanations, False
     
     try:

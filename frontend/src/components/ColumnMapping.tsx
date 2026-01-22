@@ -1,5 +1,5 @@
 import { ColumnMapping as ColumnMappingType } from '../types';
-import { Sparkles, HelpCircle } from 'lucide-react';
+import { Sparkles, Info } from 'lucide-react';
 
 interface ColumnMappingProps {
   columns: string[];
@@ -20,14 +20,14 @@ const ColumnMapping = ({
   onAutoMap,
   isAutoMapping = false,
 }: ColumnMappingProps) => {
-  const fields: { key: keyof ColumnMappingType; label: string; required: boolean; help: string }[] = [
-    { key: 'date', label: 'Date', required: true, help: 'Transaction date (e.g. when it occurred). Required for matching.' },
-    { key: 'vendor', label: 'Vendor', required: true, help: 'Payee or merchant name. Used to match ledger and bank transactions.' },
-    { key: 'description', label: 'Description', required: true, help: 'Short description of the transaction. Helps verify matches.' },
-    { key: 'money_in', label: 'Money In', required: false, help: 'Deposits, credits, or income. At least one of Money In or Money Out is required.' },
-    { key: 'money_out', label: 'Money Out', required: false, help: 'Withdrawals, debits, or expenses. At least one of Money In or Money Out is required.' },
-    { key: 'reference', label: 'Reference', required: false, help: 'Optional: check number, transaction ID, or reference code.' },
-    { key: 'category', label: 'Category', required: false, help: 'Optional: category or account code.' },
+  const fields: { key: keyof ColumnMappingType; label: string; required: boolean; requiredOneOf?: boolean; help: string }[] = [
+    { key: 'date', label: 'Date', required: true, help: 'Transaction date, e.g. when it occurred.' },
+    { key: 'vendor', label: 'Vendor', required: true, help: 'Payee or merchant name.' },
+    { key: 'description', label: 'Description', required: true, help: 'Short description of the transaction.' },
+    { key: 'money_in', label: 'Money In', required: false, requiredOneOf: true, help: 'Deposits, credits, or income. At least one of "Money In" or "Money Out" is required.' },
+    { key: 'money_out', label: 'Money Out', required: false, requiredOneOf: true, help: 'Withdrawals, debits, or expenses. At least one of "Money In" or "Money Out" is required.' },
+    { key: 'reference', label: 'Reference', required: false, help: '(Optional) Check number, transaction ID, or reference code.' },
+    { key: 'category', label: 'Category', required: false, help: '(Optional) Category or account code.' },
   ];
 
   const handleChange = (key: keyof ColumnMappingType, value: string) => {
@@ -46,7 +46,7 @@ const ColumnMapping = ({
       <div className="flex items-center justify-between mb-3 gap-2">
         <h3 className="text-sm font-semibold text-text-primary">{label}</h3>
         <div className="flex items-center gap-2 shrink-0 ml-auto">
-          {onAutoMap && (
+          {onAutoMap && (isAutoMapping || !autoMapping) && (
             <button
               type="button"
               onClick={onAutoMap}
@@ -74,7 +74,7 @@ const ColumnMapping = ({
               <div className="flex items-center gap-1 mb-1">
                 <label className="text-xs font-medium text-text-primary">
                   {field.label}
-                  {field.required && <span className="text-red-500 ml-1">*</span>}
+                  {(field.required || field.requiredOneOf) && <span className="text-red-500 ml-1">*</span>}
                 </label>
                 <span className="group relative inline-flex">
                   <button
@@ -82,7 +82,7 @@ const ColumnMapping = ({
                     aria-label={`Help: ${field.label}`}
                     className="p-0.5 rounded text-gray-400 hover:text-primary-blue hover:bg-blue-100 transition-colors focus:outline-none focus:ring-1 focus:ring-primary-blue focus:ring-offset-1"
                   >
-                    <HelpCircle className="w-3.5 h-3.5" />
+                    <Info className="w-3.5 h-3.5" />
                   </button>
                   <span
                     role="tooltip"
