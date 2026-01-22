@@ -111,20 +111,20 @@ async def export_matches():
 async def export_unmatched_ledger():
     """Export unmatched ledger transactions as CSV."""
     from backend.api.routes.matching import match_state_lock
-    
+
     with match_state_lock:
-        matched_ids = match_state['matched_ledger_ids']
-        # Ensure it's always a set
-        if not isinstance(matched_ids, set):
-            match_state['matched_ledger_ids'] = set(matched_ids) if matched_ids else set()
-            matched_ids = match_state['matched_ledger_ids']
-        all_ledger = match_state['normalized_ledger']
-    
+        matched_ids_raw = match_state['matched_ledger_ids']
+        if not isinstance(matched_ids_raw, set):
+            match_state['matched_ledger_ids'] = set(matched_ids_raw) if matched_ids_raw else set()
+            matched_ids_raw = match_state['matched_ledger_ids']
+        matched_ids_snapshot = set(matched_ids_raw)
+        all_ledger_snapshot = list(match_state['normalized_ledger'])
+
     unmatched = [
-        txn for txn in all_ledger
-        if txn['id'] not in matched_ids
+        txn for txn in all_ledger_snapshot
+        if txn['id'] not in matched_ids_snapshot
     ]
-    
+
     csv_content = transactions_to_csv(unmatched)
     
     return Response(
@@ -138,20 +138,20 @@ async def export_unmatched_ledger():
 async def export_unmatched_bank():
     """Export unmatched bank transactions as CSV."""
     from backend.api.routes.matching import match_state_lock
-    
+
     with match_state_lock:
-        matched_ids = match_state['matched_bank_ids']
-        # Ensure it's always a set
-        if not isinstance(matched_ids, set):
-            match_state['matched_bank_ids'] = set(matched_ids) if matched_ids else set()
-            matched_ids = match_state['matched_bank_ids']
-        all_bank = match_state['normalized_bank']
-    
+        matched_ids_raw = match_state['matched_bank_ids']
+        if not isinstance(matched_ids_raw, set):
+            match_state['matched_bank_ids'] = set(matched_ids_raw) if matched_ids_raw else set()
+            matched_ids_raw = match_state['matched_bank_ids']
+        matched_ids_snapshot = set(matched_ids_raw)
+        all_bank_snapshot = list(match_state['normalized_bank'])
+
     unmatched = [
-        txn for txn in all_bank
-        if txn['id'] not in matched_ids
+        txn for txn in all_bank_snapshot
+        if txn['id'] not in matched_ids_snapshot
     ]
-    
+
     csv_content = transactions_to_csv(unmatched)
     
     return Response(

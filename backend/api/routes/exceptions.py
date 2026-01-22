@@ -20,16 +20,16 @@ async def get_unmatched_ledger():
     from backend.api.routes.matching import match_state_lock
 
     with match_state_lock:
-        matched_ids = match_state['matched_ledger_ids']
-        # Ensure it's always a set
-        if not isinstance(matched_ids, set):
-            match_state['matched_ledger_ids'] = set(matched_ids) if matched_ids else set()
-            matched_ids = match_state['matched_ledger_ids']
-        all_ledger = match_state['normalized_ledger']
+        matched_ids_raw = match_state['matched_ledger_ids']
+        if not isinstance(matched_ids_raw, set):
+            match_state['matched_ledger_ids'] = set(matched_ids_raw) if matched_ids_raw else set()
+            matched_ids_raw = match_state['matched_ledger_ids']
+        matched_ids_snapshot = set(matched_ids_raw)
+        all_ledger_snapshot = list(match_state['normalized_ledger'])
 
     unmatched = [
-        txn for txn in all_ledger
-        if txn['id'] not in matched_ids
+        txn for txn in all_ledger_snapshot
+        if txn['id'] not in matched_ids_snapshot
     ]
 
     return {
@@ -44,16 +44,16 @@ async def get_unmatched_bank():
     from backend.api.routes.matching import match_state_lock
 
     with match_state_lock:
-        matched_ids = match_state['matched_bank_ids']
-        # Ensure it's always a set
-        if not isinstance(matched_ids, set):
-            match_state['matched_bank_ids'] = set(matched_ids) if matched_ids else set()
-            matched_ids = match_state['matched_bank_ids']
-        all_bank = match_state['normalized_bank']
+        matched_ids_raw = match_state['matched_bank_ids']
+        if not isinstance(matched_ids_raw, set):
+            match_state['matched_bank_ids'] = set(matched_ids_raw) if matched_ids_raw else set()
+            matched_ids_raw = match_state['matched_bank_ids']
+        matched_ids_snapshot = set(matched_ids_raw)
+        all_bank_snapshot = list(match_state['normalized_bank'])
 
     unmatched = [
-        txn for txn in all_bank
-        if txn['id'] not in matched_ids
+        txn for txn in all_bank_snapshot
+        if txn['id'] not in matched_ids_snapshot
     ]
 
     return {
@@ -92,20 +92,21 @@ async def rerun_matching(
             require_reference=require_reference
         )
 
-        # Get unmatched transactions with thread-safe access
+        # Snapshot inside lock; filter outside to avoid inconsistent state if
+        # another thread modifies match_state during filtering.
         with match_state_lock:
-            matched_ledger_ids = match_state['matched_ledger_ids']
-            matched_bank_ids = match_state['matched_bank_ids']
-            # Ensure they're always sets
-            if not isinstance(matched_ledger_ids, set):
-                match_state['matched_ledger_ids'] = set(matched_ledger_ids) if matched_ledger_ids else set()
-                matched_ledger_ids = match_state['matched_ledger_ids']
-            if not isinstance(matched_bank_ids, set):
-                match_state['matched_bank_ids'] = set(matched_bank_ids) if matched_bank_ids else set()
-                matched_bank_ids = match_state['matched_bank_ids']
-
-            normalized_ledger = match_state['normalized_ledger']
-            normalized_bank = match_state['normalized_bank']
+            mli = match_state['matched_ledger_ids']
+            mbi = match_state['matched_bank_ids']
+            if not isinstance(mli, set):
+                match_state['matched_ledger_ids'] = set(mli) if mli else set()
+                mli = match_state['matched_ledger_ids']
+            if not isinstance(mbi, set):
+                match_state['matched_bank_ids'] = set(mbi) if mbi else set()
+                mbi = match_state['matched_bank_ids']
+            matched_ledger_ids = set(mli)
+            matched_bank_ids = set(mbi)
+            normalized_ledger = list(match_state['normalized_ledger'])
+            normalized_bank = list(match_state['normalized_bank'])
 
         unmatched_ledger = [
             txn for txn in normalized_ledger

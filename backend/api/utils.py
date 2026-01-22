@@ -1,11 +1,14 @@
 """
 Utility functions for data processing.
 """
+import logging
 import pandas as pd
 import uuid
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from io import BytesIO
+
+logger = logging.getLogger(__name__)
 
 
 def load_file(file_content: bytes, filename: str) -> pd.DataFrame:
@@ -38,16 +41,23 @@ def get_sample_data(df: pd.DataFrame) -> Dict[str, List[str]]:
     return sample_data
 
 
-def normalize_transactions(df: pd.DataFrame, mapping: Dict[str, Any], source: str) -> List[Dict[str, Any]]:
-    """Normalize dataframe to common transaction format."""
-    transactions = []
-    
+def normalize_transactions(
+    df: pd.DataFrame, mapping: Dict[str, Any], source: str
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Normalize dataframe to common transaction format.
+    Returns (transactions, skipped) where skipped is a list of
+    {"row": index, "error": str} for rows that failed to parse.
+    """
+    transactions: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+
     # Validate required mappings
     required_fields = ['date', 'vendor', 'description']
     for field in required_fields:
         if not mapping.get(field):
             raise ValueError(f"Required field '{field}' is not mapped. Please select a column for {field}.")
-    
+
     for idx, row in df.iterrows():
         try:
             # Parse date - validated above to be not None
@@ -60,29 +70,28 @@ def normalize_transactions(df: pd.DataFrame, mapping: Dict[str, Any], source: st
                         break
                     except ValueError:
                         continue
-            
+
             # Parse amount from separate money in/out columns
             money_in_val = 0.0
             money_out_val = 0.0
-            
+
             if mapping.get('money_in') and pd.notna(row[mapping['money_in']]):
                 val = row[mapping['money_in']]
                 if isinstance(val, str):
                     val = val.replace(',', '').replace('$', '').strip()
                 if val:
                     money_in_val = abs(float(val))
-            
+
             if mapping.get('money_out') and pd.notna(row[mapping['money_out']]):
                 val = row[mapping['money_out']]
                 if isinstance(val, str):
                     val = val.replace(',', '').replace('$', '').strip()
                 if val:
                     money_out_val = abs(float(val))
-            
+
             # Determine type and amount
-            # Calculate net amount: positive = money_in, negative = money_out
             net_amount = money_in_val - money_out_val
-            
+
             if net_amount > 0:
                 txn_type = 'money_in'
                 amount_val = net_amount
@@ -90,14 +99,12 @@ def normalize_transactions(df: pd.DataFrame, mapping: Dict[str, Any], source: st
                 txn_type = 'money_out'
                 amount_val = abs(net_amount)
             else:
-                # Both zero or equal - default to money_out with zero amount
                 txn_type = 'money_out'
                 amount_val = 0.0
-            
-            # Access vendor and description - validated above to be not None
+
             vendor_col = mapping['vendor']
             desc_col = mapping['description']
-            
+
             transaction = {
                 'id': str(uuid.uuid4())[:8],
                 'date': pd.to_datetime(date_val).isoformat(),
@@ -112,6 +119,18 @@ def normalize_transactions(df: pd.DataFrame, mapping: Dict[str, Any], source: st
             }
             transactions.append(transaction)
         except Exception as e:
-            continue
-    
-    return transactions
+            err_msg = str(e)
+            skipped.append({"row": int(idx), "error": err_msg})
+            logger.warning(
+                "normalize_transactions skipped row %s (%s): %s",
+                idx, source, err_msg,
+                exc_info=False,
+            )
+
+    if skipped:
+        logger.warning(
+            "normalize_transactions (%s): %d rows skipped of %d total",
+            source, len(skipped), len(df),
+        )
+
+    return (transactions, skipped)

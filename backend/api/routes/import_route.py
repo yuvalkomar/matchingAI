@@ -225,16 +225,20 @@ async def process_files(request: Dict[str, Any]):
         'category': bank_mapping.get('category'),
     }
     
-    # Normalize transactions
-    normalized_ledger = normalize_transactions(ledger_df, ledger_map_dict, 'ledger')
-    normalized_bank = normalize_transactions(bank_df, bank_map_dict, 'bank')
-    
+    # Normalize transactions (returns transactions + skipped rows for visibility)
+    normalized_ledger, skipped_ledger = normalize_transactions(ledger_df, ledger_map_dict, 'ledger')
+    normalized_bank, skipped_bank = normalize_transactions(bank_df, bank_map_dict, 'bank')
+
     return {
         "success": True,
         "ledger_count": len(normalized_ledger),
         "bank_count": len(normalized_bank),
         "normalized_ledger": normalized_ledger,
         "normalized_bank": normalized_bank,
+        "skipped_ledger": skipped_ledger,
+        "skipped_bank": skipped_bank,
+        "skipped_ledger_count": len(skipped_ledger),
+        "skipped_bank_count": len(skipped_bank),
     }
 
 
