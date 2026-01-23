@@ -31,7 +31,8 @@ import {
   Loader2,
   Pause,
   Play,
-  Check
+  Check,
+  Info
 } from 'lucide-react';
 
 interface ConfirmedMatch {
@@ -104,12 +105,16 @@ const Matching = () => {
       setMatchingProgress(progress);
       await fetchPending();
       
-      if (!progress.in_progress && progress.total > 0) {
+      // Stop polling if matching is not in progress, or is paused, or has completed
+      if (!progress.in_progress || progress.paused) {
         if (pollingRef.current) {
           clearInterval(pollingRef.current);
           pollingRef.current = null;
         }
-        await loadAllData();
+        // Reload data when matching stops
+        if (!progress.in_progress && progress.total > 0) {
+          await loadAllData();
+        }
       }
     } catch (error) {
       console.error('Failed to poll progress:', error);
@@ -138,9 +143,23 @@ const Matching = () => {
   }, []);
 
   useEffect(() => {
-    // Start polling for progress immediately
-    pollProgress();
-    pollingRef.current = setInterval(pollProgress, 1000); // Poll every second
+    // Check progress once on mount to determine if we need to poll
+    const initPolling = async () => {
+      try {
+        const progress = await getMatchingProgress();
+        setMatchingProgress(progress);
+        await fetchPending();
+        
+        // Only start polling if matching is actively in progress and not paused
+        if (progress.in_progress && !progress.paused) {
+          pollingRef.current = setInterval(pollProgress, 1000);
+        }
+      } catch (error) {
+        console.error('Failed to get initial progress:', error);
+      }
+    };
+    
+    initPolling();
     
     // Load initial data
     loadAllData();
@@ -150,7 +169,7 @@ const Matching = () => {
         clearInterval(pollingRef.current);
       }
     };
-  }, [loadAllData, pollProgress]);
+  }, [loadAllData, pollProgress, fetchPending]);
 
   const handleStartReview = async () => {
     try {
@@ -276,6 +295,10 @@ const Matching = () => {
   const handleResumeMatching = async () => {
     try {
       await resumeMatching();
+      // Restart polling when resuming
+      if (!pollingRef.current) {
+        pollingRef.current = setInterval(pollProgress, 1000);
+      }
       await pollProgress(); // Update state immediately
     } catch (error: any) {
       alert(`Resume failed: ${error.response?.data?.detail || error.message}`);
@@ -485,6 +508,21 @@ const Matching = () => {
                     className="w-4 h-4 text-primary-blue focus:ring-primary-blue border-blue-300 rounded"
                   />
                   <span className="text-sm text-text-secondary">Require Reference</span>
+                  <span className="group relative inline-flex">
+                    <button
+                      type="button"
+                      aria-label="Help: Require Reference"
+                      className="p-0.5 rounded text-gray-400 hover:text-primary-blue hover:bg-blue-100 transition-colors focus:outline-none focus:ring-1 focus:ring-primary-blue focus:ring-offset-1"
+                    >
+                      <Info className="w-3.5 h-3.5" />
+                    </button>
+                    <span
+                      role="tooltip"
+                      className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 w-56 px-2.5 py-2 text-xs font-normal text-white bg-gray-800 rounded shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-opacity z-20 pointer-events-none"
+                    >
+                      When enabled, transactions must have matching reference numbers to be paired. If references don't match, no match is possible. Disable for more flexible matching based on dates and amounts.
+                    </span>
+                  </span>
                 </label>
               </div>
             </div>
