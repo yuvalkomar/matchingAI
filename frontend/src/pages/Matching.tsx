@@ -104,12 +104,16 @@ const Matching = () => {
       setMatchingProgress(progress);
       await fetchPending();
       
-      if (!progress.in_progress && progress.total > 0) {
+      // Stop polling if matching is not in progress, or is paused, or has completed
+      if (!progress.in_progress || progress.paused) {
         if (pollingRef.current) {
           clearInterval(pollingRef.current);
           pollingRef.current = null;
         }
-        await loadAllData();
+        // Reload data when matching stops
+        if (!progress.in_progress && progress.total > 0) {
+          await loadAllData();
+        }
       }
     } catch (error) {
       console.error('Failed to poll progress:', error);
@@ -138,9 +142,23 @@ const Matching = () => {
   }, []);
 
   useEffect(() => {
-    // Start polling for progress immediately
-    pollProgress();
-    pollingRef.current = setInterval(pollProgress, 1000); // Poll every second
+    // Check progress once on mount to determine if we need to poll
+    const initPolling = async () => {
+      try {
+        const progress = await getMatchingProgress();
+        setMatchingProgress(progress);
+        await fetchPending();
+        
+        // Only start polling if matching is actively in progress and not paused
+        if (progress.in_progress && !progress.paused) {
+          pollingRef.current = setInterval(pollProgress, 1000);
+        }
+      } catch (error) {
+        console.error('Failed to get initial progress:', error);
+      }
+    };
+    
+    initPolling();
     
     // Load initial data
     loadAllData();
@@ -150,7 +168,7 @@ const Matching = () => {
         clearInterval(pollingRef.current);
       }
     };
-  }, [loadAllData, pollProgress]);
+  }, [loadAllData, pollProgress, fetchPending]);
 
   const handleStartReview = async () => {
     try {
@@ -276,6 +294,10 @@ const Matching = () => {
   const handleResumeMatching = async () => {
     try {
       await resumeMatching();
+      // Restart polling when resuming
+      if (!pollingRef.current) {
+        pollingRef.current = setInterval(pollProgress, 1000);
+      }
       await pollProgress(); // Update state immediately
     } catch (error: any) {
       alert(`Resume failed: ${error.response?.data?.detail || error.message}`);
