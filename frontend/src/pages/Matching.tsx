@@ -103,7 +103,6 @@ const Matching = () => {
     try {
       const progress = await getMatchingProgress();
       setMatchingProgress(progress);
-      await fetchPending();
       
       // Stop polling if matching is not in progress, or is paused, or has completed
       if (!progress.in_progress || progress.paused) {
@@ -115,7 +114,12 @@ const Matching = () => {
         if (!progress.in_progress && progress.total > 0) {
           await loadAllData();
         }
+        // Don't fetch pending when paused or stopped
+        return;
       }
+      
+      // Only fetch pending when actively matching
+      await fetchPending();
     } catch (error) {
       console.error('Failed to poll progress:', error);
     }
@@ -285,6 +289,11 @@ const Matching = () => {
 
   const handlePauseMatching = async () => {
     try {
+      // Stop polling immediately to prevent further requests
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
       await pauseMatching();
       await pollProgress(); // Update state immediately
     } catch (error: any) {
@@ -391,7 +400,7 @@ const Matching = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-200 via-blue-100 to-blue-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 transition-opacity duration-200 ${showReviewModal ? 'opacity-50 pointer-events-none' : ''}`}>
         {/* Title + actions row (Import-style, no box) */}
         <div className="mb-4 flex items-start justify-between flex-wrap gap-4">
           <div>
@@ -404,18 +413,23 @@ const Matching = () => {
           </div>
           <div className="flex items-center gap-3 flex-wrap flex-shrink-0">
             {isMatchingInProgress && !isMatchingPaused && (
-              <button
-                onClick={handlePauseMatching}
-                className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors text-sm"
-              >
-                <Pause className="w-4 h-4" />
-                Pause Matching
-              </button>
+              <>
+                <Loader2 className="w-5 h-5 animate-spin text-blue-700 opacity-80" />
+                <button
+                  onClick={handlePauseMatching}
+                  disabled={showReviewModal}
+                  className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors disabled:cursor-not-allowed disabled:hover:bg-transparent text-sm"
+                >
+                  <Pause className="w-4 h-4" />
+                  Pause Matching
+                </button>
+              </>
             )}
             {isMatchingInProgress && isMatchingPaused && (
               <button
                 onClick={handleResumeMatching}
-                className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors text-sm"
+                disabled={showReviewModal}
+                className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors disabled:cursor-not-allowed disabled:hover:bg-transparent text-sm"
               >
                 <Play className="w-4 h-4" />
                 Resume Matching
@@ -424,8 +438,8 @@ const Matching = () => {
             {!isMatchingInProgress && (
               <button
                 onClick={handleRerunMatching}
-                disabled={isRerunning}
-                className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors disabled:opacity-50 text-sm"
+                disabled={isRerunning || showReviewModal}
+                className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors disabled:cursor-not-allowed disabled:hover:bg-transparent text-sm"
               >
                 <RefreshCw className={`w-4 h-4 ${isRerunning ? 'animate-spin' : ''}`} />
                 Re-run Matching
@@ -433,13 +447,17 @@ const Matching = () => {
             )}
             <button
               onClick={() => setShowSettings(!showSettings)}
-              className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors text-sm"
+              disabled={showReviewModal}
+              className="flex items-center gap-2 px-4 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors disabled:cursor-not-allowed disabled:hover:bg-transparent text-sm"
             >
               <Settings className="w-4 h-4" />
               Settings
             </button>
             <div className="relative group z-[100]">
-              <button className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-gold to-yellow-500 text-primary-blue rounded-xl hover:shadow-xl hover:scale-105 transition-all duration-300 font-bold text-sm shadow-lg">
+              <button 
+                disabled={showReviewModal}
+                className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-gold to-yellow-500 text-primary-blue rounded-xl hover:shadow-xl hover:scale-105 transition-all duration-300 font-bold text-sm shadow-lg disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-lg"
+              >
                 <Download className="w-4 h-4" />
                 Export
               </button>
@@ -546,7 +564,7 @@ const Matching = () => {
           
           {/* Left Column - Unmatched Ledger */}
           <div className="rounded-2xl border border-blue-300/50 bg-white/80 backdrop-blur-sm shadow-2xl overflow-hidden flex flex-col hover:shadow-3xl transition-shadow duration-300">
-            <div className="bg-gradient-to-r from-primary-blue/10 to-blue-100/50 border-b border-blue-300/50 px-4 py-3 flex items-center justify-between">
+            <div className="bg-gradient-to-r from-primary-blue/10 to-blue-100/50 border-b border-blue-300/50 px-4 py-3 flex items-center justify-between min-h-[60px]">
               <h2 className="font-bold text-text-primary flex items-center text-sm">
                 Unmatched Ledger
                 <CountBadge value={unmatchedLedger.length} tone="ledger" title="Number of unmatched ledger entries" />
@@ -554,7 +572,8 @@ const Matching = () => {
               {unmatchedLedger.length > 0 && (
                 <button
                   onClick={() => handleExport('ledger')}
-                  className="text-xs text-primary-blue hover:text-blue-700 flex items-center gap-1 transition-colors"
+                  disabled={showReviewModal}
+                  className="text-xs text-primary-blue hover:text-blue-700 flex items-center gap-1 transition-colors disabled:cursor-not-allowed disabled:hover:text-primary-blue"
                 >
                   <Download className="w-3 h-3" />
                   Export
@@ -588,26 +607,28 @@ const Matching = () => {
 
           {/* Center Column - Matches */}
           <div className="rounded-2xl border border-blue-300/50 bg-white/80 backdrop-blur-sm shadow-2xl overflow-hidden flex flex-col hover:shadow-3xl transition-shadow duration-300">
-            <div className="bg-gradient-to-r from-primary-gold/20 to-yellow-100/50 border-b border-blue-300/50 px-4 py-3 flex items-center justify-between">
+            <div className="bg-gradient-to-r from-primary-gold/20 to-yellow-100/50 border-b border-blue-300/50 px-4 py-3 flex items-center justify-between min-h-[60px]">
               <h2 className="font-bold text-text-primary flex items-center text-sm">
                 <ArrowLeftRight className="w-4 h-4 text-primary-gold mr-2" />
                 Matches
-                {isMatchingInProgress && !isMatchingPaused && <Loader2 className="w-4 h-4 animate-spin ml-2 text-primary-gold" />}
               </h2>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleStartReview}
-                  disabled={!hasSuggested}
-                  title={hasSuggested ? undefined : 'No suggested matches to review'}
-                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-gold to-yellow-500 text-primary-blue rounded-xl hover:shadow-lg hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none transition-all duration-300 font-bold text-sm shadow-md"
-                >
-                  <Eye className="w-4 h-4" />
-                  Review Matches
-                </button>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 text-xs text-text-secondary">
+                  <span>{approvedCount} approved</span>
+                  <span>•</span>
+                  <span>{suggestedCount} suggested</span>
+                  {rejectedCount > 0 && (
+                    <>
+                      <span>•</span>
+                      <span>{rejectedCount} rejected</span>
+                    </>
+                  )}
+                </div>
                 {confirmedMatches.length > 0 && !isMatchingInProgress && (
                   <button
                     onClick={() => handleExport('matches')}
-                    className="text-xs text-primary-blue hover:text-blue-700 flex items-center gap-1 transition-colors"
+                    disabled={showReviewModal}
+                    className="text-xs text-primary-blue hover:text-blue-700 flex items-center gap-1 transition-colors disabled:cursor-not-allowed disabled:hover:text-primary-blue"
                   >
                     <Download className="w-3 h-3" />
                     Export
@@ -615,18 +636,19 @@ const Matching = () => {
                 )}
               </div>
             </div>
+            {/* Review Matches Button - Centered below headline */}
+            <div className="px-4 py-3 flex justify-center">
+              <button
+                onClick={handleStartReview}
+                disabled={!hasSuggested}
+                title={hasSuggested ? undefined : 'No suggested matches to review'}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-gold to-yellow-500 text-primary-blue rounded-xl hover:shadow-lg hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none transition-all duration-300 font-bold text-sm shadow-md"
+              >
+                <Eye className="w-4 h-4" />
+                Review Matches
+              </button>
+            </div>
             <div className="flex-1 overflow-y-auto p-3">
-              {/* Compact summary — always visible */}
-              <div className="mb-3">
-                <p className="text-sm text-text-primary">
-                  <span className="font-semibold">{approvedCount} approved</span>
-                  <span className="text-text-secondary mx-1.5">•</span>
-                  <span className="text-text-secondary">{suggestedCount} suggested</span>
-                </p>
-                {rejectedCount > 0 && (
-                  <p className="text-xs text-text-secondary mt-1">Rejected: {rejectedCount}</p>
-                )}
-              </div>
 
               {/* Empty state when no approved and no suggested */}
               {approvedCount === 0 && pendingMatchesList.length === 0 && (
@@ -702,7 +724,7 @@ const Matching = () => {
 
           {/* Right Column - Unmatched Bank */}
           <div className="rounded-2xl border border-blue-300/50 bg-white/80 backdrop-blur-sm shadow-2xl overflow-hidden flex flex-col hover:shadow-3xl transition-shadow duration-300">
-            <div className="bg-gradient-to-r from-primary-blue/10 to-blue-100/50 border-b border-blue-300/50 px-4 py-3 flex items-center justify-between">
+            <div className="bg-gradient-to-r from-primary-blue/10 to-blue-100/50 border-b border-blue-300/50 px-4 py-3 flex items-center justify-between min-h-[60px]">
               <h2 className="font-bold text-text-primary flex items-center text-sm">
                 Unmatched Bank
                 <CountBadge value={unmatchedBank.length} tone="bank" title="Number of unmatched bank transactions" />
@@ -710,7 +732,8 @@ const Matching = () => {
               {unmatchedBank.length > 0 && (
                 <button
                   onClick={() => handleExport('bank')}
-                  className="text-xs text-primary-blue hover:text-blue-700 flex items-center gap-1 transition-colors"
+                  disabled={showReviewModal}
+                  className="text-xs text-primary-blue hover:text-blue-700 flex items-center gap-1 transition-colors disabled:cursor-not-allowed disabled:hover:text-primary-blue"
                 >
                   <Download className="w-3 h-3" />
                   Export
@@ -747,7 +770,8 @@ const Matching = () => {
         <div className="mt-6 text-center">
           <button
             onClick={() => navigate('/import')}
-            className="text-sm text-text-secondary hover:text-primary-blue transition-colors font-medium"
+            disabled={showReviewModal}
+            className="text-sm text-text-secondary hover:text-primary-blue transition-colors font-medium disabled:cursor-not-allowed disabled:hover:text-text-secondary"
           >
             ← Import different files
           </button>
