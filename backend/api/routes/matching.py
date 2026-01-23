@@ -455,6 +455,70 @@ async def submit_match_action(action: MatchAction):
     }
 
 
+@router.post("/reject-approved")
+async def reject_approved_match(request: Dict[str, Any]):
+    """Reject an already approved match by removing it from confirmed_matches and adding to rejected_matches."""
+    from datetime import datetime
+    
+    ledger_id = request.get('ledger_id')
+    bank_id = request.get('bank_id')
+    
+    if not ledger_id or not bank_id:
+        raise HTTPException(status_code=400, detail="ledger_id and bank_id are required")
+    
+    with match_state_lock:
+        confirmed_matches = match_state['confirmed_matches']
+        
+        # Find and remove the match from confirmed_matches
+        match_to_reject = None
+        for i, match in enumerate(confirmed_matches):
+            if (match['ledger_txn']['id'] == ledger_id and 
+                match['bank_txn']['id'] == bank_id):
+                match_to_reject = confirmed_matches.pop(i)
+                break
+        
+        if not match_to_reject:
+            raise HTTPException(status_code=404, detail="Approved match not found")
+        
+        timestamp = datetime.now().isoformat()
+        
+        # Add to rejected_matches
+        match_state['rejected_matches'].append({
+            'ledger_txn': match_to_reject['ledger_txn'],
+            'bank_txn': match_to_reject['bank_txn'],
+            'timestamp': timestamp,
+        })
+        
+        # Remove from matched sets
+        if not isinstance(match_state['matched_bank_ids'], set):
+            match_state['matched_bank_ids'] = set(match_state['matched_bank_ids'])
+        if not isinstance(match_state['matched_ledger_ids'], set):
+            match_state['matched_ledger_ids'] = set(match_state['matched_ledger_ids'])
+        
+        match_state['matched_bank_ids'].discard(bank_id)
+        match_state['matched_ledger_ids'].discard(ledger_id)
+        
+        # Record in audit trail
+        audit_entry = {
+            'timestamp': timestamp,
+            'action': 'reject',
+            'ledger_id': match_to_reject['ledger_txn']['id'],
+            'bank_id': match_to_reject['bank_txn']['id'],
+            'ledger_vendor': match_to_reject['ledger_txn']['vendor'],
+            'bank_vendor': match_to_reject['bank_txn']['vendor'],
+            'ledger_amount': match_to_reject['ledger_txn']['amount'],
+            'bank_amount': match_to_reject['bank_txn']['amount'],
+            'confidence': match_to_reject.get('confidence', 0.0),
+            'heuristic_score': match_to_reject.get('heuristic_score', 0.0),
+            'llm_explanation': match_to_reject.get('llm_explanation', ''),
+            'notes': 'Rejected from approved matches',
+            'matching_config': {},
+        }
+        match_state['audit_trail'].append(audit_entry)
+    
+    return {"success": True, "message": "Approved match rejected successfully"}
+
+
 @router.post("/set-transactions")
 async def set_transactions(request: Dict[str, Any]):
     """Set normalized transactions (called after import processing)."""

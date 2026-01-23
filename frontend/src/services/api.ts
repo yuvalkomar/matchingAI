@@ -110,6 +110,13 @@ export const submitMatchAction = async (action: string, matchIndex: number, note
   });
 };
 
+export const rejectApprovedMatch = async (ledgerId: string, bankId: string): Promise<void> => {
+  await api.post('/match/reject-approved', {
+    ledger_id: ledgerId,
+    bank_id: bankId,
+  });
+};
+
 export const getStats = async (): Promise<{
   confirmed: number;
   rejected: number;
