@@ -97,12 +97,23 @@ LLM assistance is **optional** and used for:
 
 ### Enable LLM
 
-1. Get your API key from: https://makersuite.google.com/app/apikey
-2. Add it to the `.env` file:
-```
-GEMINI_API_KEY=your-api-key-here
-```
-3. The app will automatically use AI features when available
+1. **Install the Google GenAI SDK:**
+   ```bash
+   pip install google-genai
+   ```
+   Note: If you have the old `google-generativeai` package, uninstall it first:
+   ```bash
+   pip uninstall google-generativeai -y
+   ```
+
+2. Get your API key from: https://makersuite.google.com/app/apikey
+
+3. Add it to the `.env` file:
+   ```
+   GEMINI_API_KEY=your-api-key-here
+   ```
+
+4. The app will automatically use AI features when available
 
 ## Development
 

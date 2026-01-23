@@ -23,7 +23,8 @@ export const uploadFile = async (file: File): Promise<FileUploadResponse> => {
 
 export const autoMapColumns = async (fileId: string): Promise<AutoMapResponse> => {
   const response = await api.post('/import/auto-map', null, {
-    params: { file_id: fileId },
+    params: { file_id: fileId, timeout: 30 }, // Pass timeout to backend (increased from 20 to 30)
+    timeout: 40000, // 40 second timeout for frontend (30s backend + 10s buffer)
   });
   return response.data;
 };

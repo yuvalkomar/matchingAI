@@ -9,9 +9,14 @@ import logging
 from typing import Dict, Optional, Tuple, List
 from dotenv import load_dotenv
 import concurrent.futures
+import threading
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+# Semaphore to limit concurrent LLM API calls (prevent rate limiting issues)
+# Increased to 3 to allow faster processing when both files are uploaded
+_llm_semaphore = threading.Semaphore(3)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -24,10 +29,15 @@ def is_llm_configured() -> bool:
 
 def get_gemini_model():
     """Get configured Gemini model."""
-    import google.generativeai as genai
+    try:
+        from google import genai
+    except ImportError as e:
+        raise ImportError(
+            "Failed to import google-genai. Please install it with: pip install google-genai"
+        ) from e
     
-    genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
-    return genai.GenerativeModel('gemini-2.5-flash')
+    client = genai.Client(api_key=os.environ.get('GEMINI_API_KEY'))
+    return client, 'gemini-2.5-flash'
 
 
 def normalize_vendor_name(vendor: str) -> Tuple[str, bool]:
@@ -45,7 +55,7 @@ def normalize_vendor_name(vendor: str) -> Tuple[str, bool]:
         return vendor, False
     
     try:
-        model = get_gemini_model()
+        client, model_name = get_gemini_model()
         
         prompt = f"""You are a vendor name normalizer. Given a raw vendor name from a bank statement or receipt, return the canonical company name.
 
@@ -59,7 +69,7 @@ Examples:
 
 Normalize this vendor name: {vendor}"""
 
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model=model_name, contents=prompt)
         
         # Extract JSON from response
         response_text = response.text.strip()
@@ -95,7 +105,7 @@ def compute_semantic_similarity(desc1: str, desc2: str) -> Tuple[float, bool]:
         return 0.0, False
     
     try:
-        model = get_gemini_model()
+        client, model_name = get_gemini_model()
         
         prompt = f"""You compare transaction descriptions for semantic similarity.
 
@@ -113,7 +123,7 @@ Compare these transaction descriptions:
 Description 1: {desc1}
 Description 2: {desc2}"""
 
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model=model_name, contents=prompt)
         
         # Extract JSON from response
         response_text = response.text.strip()
@@ -153,7 +163,7 @@ def enhance_match_explanation(
         return base_explanations, False
     
     try:
-        model = get_gemini_model()
+        client, model_name = get_gemini_model()
         
         prompt = f"""You provide additional context for transaction matching.
 
@@ -173,7 +183,7 @@ Ledger: {ledger_txn['vendor']} - {ledger_txn['description']} (${ledger_txn['amou
 Bank: {bank_txn['vendor']} - {bank_txn['description']} (${bank_txn['amount']})
 Existing explanations: {base_explanations}"""
 
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model=model_name, contents=prompt)
         
         # Extract JSON from response
         response_text = response.text.strip()
@@ -219,92 +229,119 @@ def auto_match_columns(columns: list, sample_data: dict, timeout: int = 10) -> T
         return {}, False
     
     try:
-        import google.generativeai as genai
+        try:
+            from google import genai
+        except ImportError as e:
+            raise ImportError(
+                "Failed to import google-genai. Please install it with: pip install google-genai"
+            ) from e
         import signal
         
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        client = genai.Client(api_key=api_key)
+        # Using gemini-2.5-flash for speed - it's optimized for fast responses
+        model_name = 'gemini-2.5-flash'
         
-        # Build sample data string
+        # Build sample data string - use only 1-2 samples to reduce token count and speed up processing
         sample_str = ""
         for col in columns:
             values = sample_data.get(col, [])
-            sample_str += f"\n- Column '{col}': {values[:3]}"
+            # Use only first 2 values to reduce prompt size and speed up LLM processing
+            sample_str += f"\n- '{col}': {values[:2]}"
         
-        prompt = f"""You are a data column classifier for financial transaction files. 
-Analyze the column names and sample data to determine which column matches each category.
+        # Optimized prompt - more concise to reduce processing time
+        prompt = f"""Map financial transaction columns to categories. Use EXACT column names as shown.
 
-Categories to match:
-- date: Transaction date (look for dates, timestamps)
-- vendor: The other party in the transaction - who sent or received the money. This could be:
-  * Merchant/store names (e.g., "STAPLES", "Amazon")
-  * Payee or payer names
-  * Company or person names
-  * Counterparty, sender, or recipient
-  * IMPORTANT: Often vendor info is embedded in description/details columns. Look for patterns like:
-    - "loan from AMB" -> vendor is "AMB"
-    - "Payment to ABC Corp" -> vendor is "ABC Corp"
-    - "STAPLES STORE #1234" -> vendor is "Staples"
-    - "Transfer from John" -> vendor is "John"
-  * If there's no dedicated vendor column but a description column contains who the transaction was with, use that column for vendor
-  * Common column names: Vendor, Merchant, Payee, Payer, Name, Party, Counterparty, From, To, Sender, Recipient, Description, Details, Narrative, Memo
-- description: Transaction description, narrative, memo, or details explaining what the transaction is for
-  * Note: If a column contains both vendor info AND transaction details, you can map it to BOTH vendor and description
-- money_in: Credits/deposits column (incoming money only). If there's only one amount column with positive values representing expenses/debits, use it for money_out instead.
-- money_out: Debits/payments/expenses column (outgoing money only). If there's only one "Amount" column with no separate credit/debit columns, map it to money_out.
-- reference: Reference number, invoice ID, check number
-- category: Expense category, transaction type/classification
+Categories: date, vendor, description, money_in, money_out, reference, category
 
-IMPORTANT RULES:
-1. Do NOT use "amount" as a category - only use money_in and money_out
-2. If there's a single amount column (named "Amount", "Sum", "Value", etc.), map it to money_out (most transactions are expenses)
-3. For vendor, prefer matching to ANY column that contains information about who the transaction was with, even if it's a description/details column
+Rules:
+- date: Transaction date/timestamp
+- vendor: Other party (merchant, payee, payer). If vendor info is in description (e.g., "loan from AMB"), use that column for vendor
+- description: Transaction details. Can be same as vendor if it contains both
+- money_in: Credits/deposits (incoming)
+- money_out: Debits/expenses (outgoing). If single "Amount" column exists, map to money_out
+- reference: Ref number, invoice ID, check number
+- category: Expense category/classification
 
-Columns available:{sample_str}
+Columns:{sample_str}
 
-Return ONLY a JSON object mapping category to column name. 
-Use null if no matching column exists.
+Return JSON only: {{"date": "COLUMN_NAME", "vendor": "COLUMN_NAME", "description": "COLUMN_NAME", "money_in": "COLUMN_NAME" or null, "money_out": "COLUMN_NAME" or null, "reference": "COLUMN_NAME" or null, "category": "COLUMN_NAME" or null}}
 
-Example response:
-{{"date": "Transaction Date", "vendor": "Merchant Name", "description": "Details", "money_in": null, "money_out": "Amount", "reference": "Ref #", "category": "Category"}}
+Use EXACT column names from the list above (case-sensitive, exact spacing)."""
 
-Example where description contains vendor info:
-If columns include "Date", "Details" (with values like "loan from AMB", "payment to XYZ Corp"), "Amount"
-Then: {{"date": "Date", "vendor": "Details", "description": "Details", "money_in": null, "money_out": "Amount", ...}}
-
-Analyze and match:"""
-
-        # Use timeout for the API call
-        def call_llm():
-            return model.generate_content(prompt)
-        
-        # Use ThreadPoolExecutor with timeout
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(call_llm)
-            try:
-                response = future.result(timeout=timeout)
-            except concurrent.futures.TimeoutError:
-                logger.warning(f"AI column matching timed out after {timeout} seconds")
-                return {}, False
+        # Make the API call with semaphore to limit concurrent requests
+        # We're already in an executor from import_route, so no need for nested ThreadPoolExecutor
+        # The semaphore prevents too many concurrent API calls which could cause rate limiting
+        try:
+            with _llm_semaphore:
+                logger.debug(f"Acquired LLM semaphore, making API call...")
+                # Optimize API call for speed: use response_mime_type to get JSON directly
+                # This makes parsing faster and the response more structured
+                try:
+                    from google.genai.types import GenerateContentConfig
+                    # Use structured JSON output for faster parsing
+                    config = GenerateContentConfig(
+                        temperature=0.1,  # Lower temperature = faster, more deterministic
+                        response_mime_type="application/json",  # Get JSON directly
+                    )
+                    response = client.models.generate_content(
+                        model=model_name, 
+                        contents=prompt,
+                        config=config
+                    )
+                except (ImportError, AttributeError):
+                    # Fallback if GenerateContentConfig is not available
+                    # Just use basic call - still works, just slightly slower
+                    response = client.models.generate_content(model=model_name, contents=prompt)
+                logger.debug(f"API call completed, releasing semaphore")
+        except Exception as e:
+            # If the call itself fails (not a timeout), log and return
+            logger.warning(f"AI column matching API call failed: {str(e)}")
+            return {}, False
         
         # Extract JSON from response
+        # If we used response_mime_type="application/json", the response is already JSON
         response_text = response.text.strip()
-        if response_text.startswith('```'):
-            response_text = response_text.split('```')[1]
-            if response_text.startswith('json'):
-                response_text = response_text[4:]
-        response_text = response_text.strip()
         
-        result = json.loads(response_text)
+        # Try to parse as-is first (in case response_mime_type was used)
+        try:
+            result = json.loads(response_text)
+        except json.JSONDecodeError:
+            # Fallback: handle markdown code blocks if present
+            if response_text.startswith('```'):
+                response_text = response_text.split('```')[1]
+                if response_text.startswith('json'):
+                    response_text = response_text[4:]
+            response_text = response_text.strip()
+            result = json.loads(response_text)
         
-        # Validate that matched columns actually exist
+        # Log the raw LLM response for debugging
+        logger.debug(f"LLM raw response: {result}")
+        logger.debug(f"Available columns: {columns}")
+        
+        # Create a case-insensitive lookup map for columns
+        column_lookup = {col.lower().strip(): col for col in columns}
+        
+        # Validate that matched columns actually exist (case-insensitive, trimmed)
         valid_mapping = {}
         for category, col_name in result.items():
-            if col_name and col_name in columns:
-                valid_mapping[category] = col_name
+            if col_name:
+                # Try exact match first
+                if col_name in columns:
+                    valid_mapping[category] = col_name
+                else:
+                    # Try case-insensitive match with trimmed whitespace
+                    col_name_normalized = col_name.strip().lower()
+                    if col_name_normalized in column_lookup:
+                        # Use the original column name (preserving case)
+                        valid_mapping[category] = column_lookup[col_name_normalized]
+                        logger.debug(f"Matched '{col_name}' (normalized) to '{valid_mapping[category]}' for category '{category}'")
+                    else:
+                        valid_mapping[category] = None
+                        logger.warning(f"Column '{col_name}' not found in available columns for category '{category}'")
             else:
                 valid_mapping[category] = None
         
+        logger.info(f"Final validated mapping: {valid_mapping}")
         return valid_mapping, True
         
     except json.JSONDecodeError as e:
@@ -312,7 +349,8 @@ Analyze and match:"""
         logger.warning("AI column matching: Invalid response format")
         return {}, False
     except concurrent.futures.TimeoutError:
-        # Timeout occurred (caught in inner try/except, but also here as backup)
+        # Timeout occurred - this shouldn't happen now since we removed the ThreadPoolExecutor,
+        # but keep as backup in case asyncio timeout propagates differently
         logger.warning(f"AI column matching timed out after {timeout} seconds")
         return {}, False
     except Exception as e:
@@ -349,7 +387,7 @@ def select_best_match(ledger_txn: Dict, candidates: List, heuristic_scores: Dict
         return None, "No candidates to evaluate", 0.0
     
     try:
-        model = get_gemini_model()
+        client, model_name = get_gemini_model()
         
         # Build candidate descriptions for LLM
         candidates_desc = []
@@ -404,7 +442,7 @@ Return ONLY a JSON object:
 
 Be conservative - only match if you're reasonably confident. It's better to flag for human review than make a wrong match."""
 
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model=model_name, contents=prompt)
         
         # Extract JSON from response
         response_text = response.text.strip()
