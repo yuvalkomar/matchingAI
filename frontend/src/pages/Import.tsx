@@ -22,7 +22,7 @@ const Import = () => {
     try {
       // Add timeout to the API call
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Auto-mapping timed out')), 15000) // 15 second timeout
+        setTimeout(() => reject(new Error('Auto-mapping timed out')), 35000) // 35 second timeout (increased from 15s)
       );
       
       const response = await Promise.race([
@@ -31,6 +31,8 @@ const Import = () => {
       ]) as any;
       
       console.log(`[AutoMap ${type}] Response:`, response);
+      console.log(`[AutoMap ${type}] Response mapping keys:`, response?.mapping ? Object.keys(response.mapping) : 'no mapping');
+      console.log(`[AutoMap ${type}] Response mapping values:`, response?.mapping);
       
       if (response && response.success && response.mapping) {
         // Build mapping object, handling both string values and null/undefined
@@ -46,6 +48,7 @@ const Import = () => {
           category: (response.mapping.category && typeof response.mapping.category === 'string') ? response.mapping.category : null,
         };
         console.log(`[AutoMap ${type}] Applying mapping:`, mapping);
+        console.log(`[AutoMap ${type}] Available columns:`, type === 'ledger' ? ledgerFile?.columns : bankFile?.columns);
         
         // Apply the mapping to both autoMapping (for suggestions) and mapping (for actual values)
         if (type === 'ledger') {

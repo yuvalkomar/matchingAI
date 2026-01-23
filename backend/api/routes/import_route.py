@@ -147,39 +147,71 @@ def _cleanup_file_storage():
 
 
 @router.post("/auto-map")
-async def auto_map_columns(file_id: str = Query(...), timeout: int = Query(10)):
+async def auto_map_columns(file_id: str = Query(...), timeout: int = Query(30)):
     """Use AI to automatically map columns."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"[AUTO_MAP] Starting auto-map request for file_id={file_id}, timeout={timeout}s")
+    
     with file_storage_lock:
         if file_id not in file_storage:
+            logger.warning(f"[AUTO_MAP] File not found: {file_id}")
             raise HTTPException(status_code=404, detail="File not found")
         
         file_data = file_storage[file_id]
     columns = file_data['columns']
     sample_data = file_data['sample_data']
     
+    logger.info(f"[AUTO_MAP] File found: {file_data['filename']}, columns: {len(columns)}")
+    logger.debug(f"[AUTO_MAP] Column names: {columns}")
+    
     try:
         # Run LLM call in thread pool with timeout
+        logger.info("[AUTO_MAP] Getting auto_match_columns function")
         auto_match_columns = get_auto_match_columns()
-        def call_auto_map():
-            return auto_match_columns(columns, sample_data, timeout=timeout)
+        logger.info("[AUTO_MAP] Function retrieved, creating call_auto_map wrapper")
         
         loop = asyncio.get_event_loop()
+        # Use timeout + 5 seconds buffer for asyncio, but pass timeout-2 to LLM to avoid race conditions
+        asyncio_timeout = timeout + 5
+        llm_timeout = timeout - 2  # Give LLM slightly less time to avoid race with asyncio timeout
+        logger.info(f"[AUTO_MAP] Submitting to executor with asyncio_timeout={asyncio_timeout}s, llm_timeout={llm_timeout}s")
+        
+        def call_auto_map_with_timeout():
+            logger.info("[AUTO_MAP] Inside call_auto_map(), calling auto_match_columns")
+            try:
+                result = auto_match_columns(columns, sample_data, timeout=llm_timeout)
+                logger.info(f"[AUTO_MAP] auto_match_columns returned: success={result[1]}, mappings={len(result[0])}")
+                return result
+            except Exception as e:
+                logger.error(f"[AUTO_MAP] Error in auto_match_columns: {type(e).__name__}: {str(e)}")
+                import traceback
+                logger.error(f"[AUTO_MAP] Traceback: {traceback.format_exc()}")
+                raise
+        
         try:
             mapping, success = await asyncio.wait_for(
-                loop.run_in_executor(None, call_auto_map),
-                timeout=timeout + 2  # Add 2 seconds buffer
+                loop.run_in_executor(None, call_auto_map_with_timeout),
+                timeout=asyncio_timeout
             )
+            logger.info(f"[AUTO_MAP] Request completed successfully: success={success}, mappings={len(mapping)}")
+            logger.debug(f"[AUTO_MAP] Mapping details: {mapping}")
             return {
                 "mapping": mapping,
                 "success": success,
             }
         except asyncio.TimeoutError:
+            logger.warning(f"[AUTO_MAP] asyncio.TimeoutError after {asyncio_timeout} seconds")
             return {
                 "mapping": {},
                 "success": False,
                 "error": f"Request timed out after {timeout} seconds",
             }
     except Exception as e:
+        logger.error(f"[AUTO_MAP] Unexpected error: {type(e).__name__}: {str(e)}")
+        import traceback
+        logger.error(f"[AUTO_MAP] Traceback: {traceback.format_exc()}")
         return {
             "mapping": {},
             "success": False,

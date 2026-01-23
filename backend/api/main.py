@@ -1,10 +1,25 @@
 """
 FastAPI main application.
 """
+import logging
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from backend.api.routes import import_route, matching, exceptions, export
+
+# Configure logging to output to console
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+# Set specific loggers to DEBUG if needed
+logging.getLogger('matching.llm_helper').setLevel(logging.DEBUG)
+logging.getLogger('backend.api.routes.import_route').setLevel(logging.DEBUG)
 
 app = FastAPI(
     title="Transaction Reconciliation API",
