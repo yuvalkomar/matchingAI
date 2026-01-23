@@ -2,7 +2,7 @@ type CountBadgeTone = 'ledger' | 'bank' | 'neutral';
 
 const toneStyles: Record<CountBadgeTone, string> = {
   ledger: 'bg-blue-200/90 border-blue-300/80 text-blue-800',
-  bank: 'bg-green-200/90 border-green-300/80 text-green-800',
+  bank: 'bg-blue-200/90 border-blue-300/80 text-blue-800',
   neutral: 'bg-gray-200/90 border-gray-300/80 text-text-secondary',
 };
 
