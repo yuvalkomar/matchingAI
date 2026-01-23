@@ -31,7 +31,8 @@ import {
   Loader2,
   Pause,
   Play,
-  Check
+  Check,
+  Info
 } from 'lucide-react';
 
 interface ConfirmedMatch {
@@ -507,6 +508,21 @@ const Matching = () => {
                     className="w-4 h-4 text-primary-blue focus:ring-primary-blue border-blue-300 rounded"
                   />
                   <span className="text-sm text-text-secondary">Require Reference</span>
+                  <span className="group relative inline-flex">
+                    <button
+                      type="button"
+                      aria-label="Help: Require Reference"
+                      className="p-0.5 rounded text-gray-400 hover:text-primary-blue hover:bg-blue-100 transition-colors focus:outline-none focus:ring-1 focus:ring-primary-blue focus:ring-offset-1"
+                    >
+                      <Info className="w-3.5 h-3.5" />
+                    </button>
+                    <span
+                      role="tooltip"
+                      className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 w-56 px-2.5 py-2 text-xs font-normal text-white bg-gray-800 rounded shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-opacity z-20 pointer-events-none"
+                    >
+                      When enabled, transactions must have matching reference numbers to be paired. If references don't match, no match is possible. Disable for more flexible matching based on dates and amounts.
+                    </span>
+                  </span>
                 </label>
               </div>
             </div>
