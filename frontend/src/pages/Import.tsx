@@ -34,12 +34,14 @@ const Import = () => {
       
       if (response && response.success && response.mapping) {
         // Build mapping object, handling both string values and null/undefined
+        // If LLM returns 'amount' field, use it for money_out (most common case for bank statements)
+        const amountCol = (response.mapping.amount && typeof response.mapping.amount === 'string') ? response.mapping.amount : null;
         const mapping: ColumnMappingType = {
           date: (response.mapping.date && typeof response.mapping.date === 'string') ? response.mapping.date : null,
           vendor: (response.mapping.vendor && typeof response.mapping.vendor === 'string') ? response.mapping.vendor : null,
           description: (response.mapping.description && typeof response.mapping.description === 'string') ? response.mapping.description : null,
           money_in: (response.mapping.money_in && typeof response.mapping.money_in === 'string') ? response.mapping.money_in : null,
-          money_out: (response.mapping.money_out && typeof response.mapping.money_out === 'string') ? response.mapping.money_out : null,
+          money_out: (response.mapping.money_out && typeof response.mapping.money_out === 'string') ? response.mapping.money_out : (amountCol || null),
           reference: (response.mapping.reference && typeof response.mapping.reference === 'string') ? response.mapping.reference : null,
           category: (response.mapping.category && typeof response.mapping.category === 'string') ? response.mapping.category : null,
         };

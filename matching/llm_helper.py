@@ -236,22 +236,41 @@ Analyze the column names and sample data to determine which column matches each 
 
 Categories to match:
 - date: Transaction date (look for dates, timestamps)
-- vendor: Merchant/vendor name (company names, store names)
-- description: Transaction description (narrative, memo, details)
-- amount: Single amount column (monetary values, could be positive/negative)
-- money_in: Credits/deposits column (incoming money only)
-- money_out: Debits/payments column (outgoing money only)
+- vendor: The other party in the transaction - who sent or received the money. This could be:
+  * Merchant/store names (e.g., "STAPLES", "Amazon")
+  * Payee or payer names
+  * Company or person names
+  * Counterparty, sender, or recipient
+  * IMPORTANT: Often vendor info is embedded in description/details columns. Look for patterns like:
+    - "loan from AMB" -> vendor is "AMB"
+    - "Payment to ABC Corp" -> vendor is "ABC Corp"
+    - "STAPLES STORE #1234" -> vendor is "Staples"
+    - "Transfer from John" -> vendor is "John"
+  * If there's no dedicated vendor column but a description column contains who the transaction was with, use that column for vendor
+  * Common column names: Vendor, Merchant, Payee, Payer, Name, Party, Counterparty, From, To, Sender, Recipient, Description, Details, Narrative, Memo
+- description: Transaction description, narrative, memo, or details explaining what the transaction is for
+  * Note: If a column contains both vendor info AND transaction details, you can map it to BOTH vendor and description
+- money_in: Credits/deposits column (incoming money only). If there's only one amount column with positive values representing expenses/debits, use it for money_out instead.
+- money_out: Debits/payments/expenses column (outgoing money only). If there's only one "Amount" column with no separate credit/debit columns, map it to money_out.
 - reference: Reference number, invoice ID, check number
 - category: Expense category, transaction type/classification
+
+IMPORTANT RULES:
+1. Do NOT use "amount" as a category - only use money_in and money_out
+2. If there's a single amount column (named "Amount", "Sum", "Value", etc.), map it to money_out (most transactions are expenses)
+3. For vendor, prefer matching to ANY column that contains information about who the transaction was with, even if it's a description/details column
 
 Columns available:{sample_str}
 
 Return ONLY a JSON object mapping category to column name. 
 Use null if no matching column exists.
-If you see separate debit/credit columns, use money_in and money_out instead of amount.
 
 Example response:
-{{"date": "Transaction Date", "vendor": "Merchant Name", "description": "Details", "amount": "Amount", "money_in": null, "money_out": null, "reference": "Ref #", "category": "Category"}}
+{{"date": "Transaction Date", "vendor": "Merchant Name", "description": "Details", "money_in": null, "money_out": "Amount", "reference": "Ref #", "category": "Category"}}
+
+Example where description contains vendor info:
+If columns include "Date", "Details" (with values like "loan from AMB", "payment to XYZ Corp"), "Amount"
+Then: {{"date": "Date", "vendor": "Details", "description": "Details", "money_in": null, "money_out": "Amount", ...}}
 
 Analyze and match:"""
 

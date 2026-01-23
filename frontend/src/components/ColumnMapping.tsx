@@ -22,8 +22,8 @@ const ColumnMapping = ({
 }: ColumnMappingProps) => {
   const fields: { key: keyof ColumnMappingType; label: string; required: boolean; requiredOneOf?: boolean; help: string }[] = [
     { key: 'date', label: 'Date', required: true, help: 'Transaction date, e.g. when it occurred.' },
-    { key: 'vendor', label: 'Vendor', required: true, help: 'Payee or merchant name.' },
-    { key: 'description', label: 'Description', required: true, help: 'Short description of the transaction.' },
+    { key: 'vendor', label: 'Vendor', required: true, help: 'The other party in the transaction - who paid or received money. Can be a merchant, payee, payer, or counterparty. If vendor info is embedded in a description column (e.g., "loan from AMB"), use that column.' },
+    { key: 'description', label: 'Description', required: true, help: 'Short description of the transaction. Can be the same column as Vendor if it contains both.' },
     { key: 'money_in', label: 'Money In', required: false, requiredOneOf: true, help: 'Deposits, credits, or income. At least one of "Money In" or "Money Out" is required.' },
     { key: 'money_out', label: 'Money Out', required: false, requiredOneOf: true, help: 'Withdrawals, debits, or expenses. At least one of "Money In" or "Money Out" is required.' },
     { key: 'reference', label: 'Reference', required: false, help: '(Optional) Check number, transaction ID, or reference code.' },
