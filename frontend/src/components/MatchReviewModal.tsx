@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
-import { X, Check, XCircle, Copy, SkipForward } from 'lucide-react';
+import { X, Check, XCircle, Ban, SkipForward, ChevronDown, Info } from 'lucide-react';
 import { MatchResult } from '../types';
 
 interface MatchReviewModalProps {
   match: MatchResult;
   matchIndex: number;
   total: number;
-  onAction: (action: 'match' | 'reject' | 'duplicate' | 'skip') => void;
+  onAction: (action: 'match' | 'reject' | 'exclude_ledger' | 'exclude_bank' | 'exclude_both' | 'skip') => void;
   onClose: () => void;
   isSubmitting?: boolean;
   readOnly?: boolean;
@@ -71,7 +71,7 @@ const MatchReviewModal = ({
       onClick={handleBackdropClick}
     >
       <div 
-        className="rounded-2xl border border-blue-300/50 bg-white/95 backdrop-blur-sm shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        className="rounded-2xl border border-blue-300/50 bg-white/95 backdrop-blur-sm shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -95,7 +95,7 @@ const MatchReviewModal = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-6">
           {/* AI Explanation */}
           <div className="mb-6 p-4 bg-blue-50/50 border border-blue-200/50 rounded-xl">
             <div className="flex items-start gap-3">
@@ -201,7 +201,7 @@ const MatchReviewModal = ({
 
         {/* Actions Footer */}
         {!readOnly && (
-          <div className="px-6 py-4 border-t border-blue-300/50 bg-gradient-to-r from-primary-blue/10 to-blue-100/50 flex flex-wrap gap-3 justify-center">
+          <div className="px-6 py-4 border-t border-blue-300/50 bg-gradient-to-r from-primary-blue/10 to-blue-100/50 flex flex-wrap gap-3 justify-center relative overflow-visible">
             <button
               onClick={() => onAction('match')}
               disabled={isSubmitting || !match.bank_txn}
@@ -218,22 +218,88 @@ const MatchReviewModal = ({
               <XCircle className="w-4 h-4" />
               Reject
             </button>
-            <button
-              onClick={() => onAction('duplicate')}
-              disabled={isSubmitting}
-              className="flex items-center gap-2 px-5 py-2.5 border border-blue-300 text-primary-blue rounded-xl hover:bg-blue-50 disabled:opacity-50 transition-colors font-medium text-sm"
-            >
-              <Copy className="w-4 h-4" />
-              Duplicate
-            </button>
-            <button
-              onClick={() => onAction('skip')}
-              disabled={isSubmitting}
-              className="flex items-center gap-2 px-5 py-2.5 border border-blue-300 text-text-secondary rounded-xl hover:bg-blue-50 disabled:opacity-50 transition-colors font-medium text-sm"
-            >
-              <SkipForward className="w-4 h-4" />
-              Skip
-            </button>
+            {/* Exclude button with dropdown and tooltip */}
+            <div className="relative group">
+              {/* Info icon in top-left */}
+              <span className="absolute -top-1 -left-1 z-30 group/info">
+                <button
+                  type="button"
+                  aria-label="Help: Exclude"
+                  className="p-0.5 rounded-full bg-white border border-gray-300 text-gray-400 hover:text-primary-blue hover:bg-blue-100 transition-colors focus:outline-none focus:ring-1 focus:ring-primary-blue focus:ring-offset-1"
+                >
+                  <Info className="w-3.5 h-3.5" />
+                </button>
+                <span
+                  role="tooltip"
+                  className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 w-56 px-2.5 py-2 text-xs font-normal text-white bg-gray-800 rounded shadow-lg opacity-0 invisible group-hover/info:opacity-100 group-hover/info:visible group-focus-within/info:opacity-100 group-focus-within/info:visible transition-opacity z-40 pointer-events-none"
+                >
+                  Exclude transactions from matching. Choose which side to exclude: ledger, bank, or both.
+                </span>
+              </span>
+              <button
+                disabled={isSubmitting}
+                className="flex items-center gap-2 px-5 py-2.5 border border-blue-300 text-primary-blue rounded-xl hover:bg-blue-50 disabled:opacity-50 transition-colors font-medium text-sm relative"
+              >
+                <Ban className="w-4 h-4" />
+                Exclude
+                <ChevronDown className="w-3 h-3" />
+              </button>
+              {/* Dropdown menu */}
+              <div className="absolute top-full left-0 mt-1 w-48 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 z-[100]">
+                <div className="bg-white border border-gray-300 rounded-lg shadow-xl">
+                  <button
+                    onClick={() => onAction('exclude_ledger')}
+                    disabled={isSubmitting}
+                    className="w-full text-left px-4 py-2 hover:bg-blue-50 disabled:opacity-50 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <span>📒</span>
+                    Exclude Ledger
+                  </button>
+                  <button
+                    onClick={() => onAction('exclude_bank')}
+                    disabled={isSubmitting || !match.bank_txn}
+                    className="w-full text-left px-4 py-2 hover:bg-blue-50 disabled:opacity-50 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <span>🏦</span>
+                    Exclude Bank
+                  </button>
+                  <button
+                    onClick={() => onAction('exclude_both')}
+                    disabled={isSubmitting || !match.bank_txn}
+                    className="w-full text-left px-4 py-2 hover:bg-blue-50 disabled:opacity-50 transition-colors text-sm flex items-center gap-2"
+                  >
+                    <span>📒🏦</span>
+                    Exclude Both
+                  </button>
+                </div>
+              </div>
+            </div>
+            {/* Skip button with tooltip */}
+            <div className="relative">
+              <span className="absolute -top-1 -left-1 z-10 group/info">
+                <button
+                  type="button"
+                  aria-label="Help: Skip"
+                  className="p-0.5 rounded-full bg-white border border-gray-300 text-gray-400 hover:text-primary-blue hover:bg-blue-100 transition-colors focus:outline-none focus:ring-1 focus:ring-primary-blue focus:ring-offset-1"
+                >
+                  <Info className="w-3.5 h-3.5" />
+                </button>
+                <span
+                  role="tooltip"
+                  className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 w-56 px-2.5 py-2 text-xs font-normal text-white bg-gray-800 rounded shadow-lg opacity-0 invisible group-hover/info:opacity-100 group-hover/info:visible group-focus-within/info:opacity-100 group-focus-within/info:visible transition-opacity z-20 pointer-events-none"
+                >
+                  Skip this match for now. It will remain available for review later.
+                </span>
+              </span>
+              <button
+                onClick={() => onAction('skip')}
+                disabled={isSubmitting}
+                className="flex items-center gap-2 px-5 py-2.5 border border-blue-300 text-text-secondary rounded-xl hover:bg-blue-50 disabled:opacity-50 transition-colors font-medium text-sm"
+              >
+                <SkipForward className="w-4 h-4" />
+                Skip
+              </button>
+            </div>
           </div>
         )}
       </div>

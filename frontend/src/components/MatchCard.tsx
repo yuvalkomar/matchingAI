@@ -1,11 +1,11 @@
 import { MatchResult } from '../types';
-import { CheckCircle, XCircle, AlertCircle, Info } from 'lucide-react';
+import { CheckCircle, XCircle, Ban, SkipForward, ChevronDown, Info } from 'lucide-react';
 
 interface MatchCardProps {
   match: MatchResult;
   matchIndex: number;
   total: number;
-  onAction: (action: 'match' | 'reject' | 'duplicate' | 'skip') => void;
+  onAction: (action: 'match' | 'reject' | 'exclude_ledger' | 'exclude_bank' | 'exclude_both' | 'skip') => void;
 }
 
 const MatchCard = ({ match, matchIndex, total, onAction }: MatchCardProps) => {
@@ -74,19 +74,83 @@ const MatchCard = ({ match, matchIndex, total, onAction }: MatchCardProps) => {
           <XCircle className="w-5 h-5 mr-2" />
           Reject
         </button>
-        <button
-          onClick={() => onAction('duplicate')}
-          className="btn-secondary flex items-center justify-center"
-        >
-          <AlertCircle className="w-5 h-5 mr-2" />
-          Duplicate
-        </button>
-        <button
-          onClick={() => onAction('skip')}
-          className="btn-secondary flex items-center justify-center"
-        >
-          Skip
-        </button>
+        {/* Exclude button with dropdown and tooltip */}
+        <div className="relative group">
+          {/* Info icon in top-left */}
+          <span className="absolute -top-1 -left-1 z-30 group/info">
+            <button
+              type="button"
+              aria-label="Help: Exclude"
+              className="p-0.5 rounded-full bg-white border border-gray-300 text-gray-400 hover:text-primary-blue hover:bg-blue-100 transition-colors focus:outline-none focus:ring-1 focus:ring-primary-blue focus:ring-offset-1"
+            >
+              <Info className="w-3.5 h-3.5" />
+            </button>
+            <span
+              role="tooltip"
+              className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 w-56 px-2.5 py-2 text-xs font-normal text-white bg-gray-800 rounded shadow-lg opacity-0 invisible group-hover/info:opacity-100 group-hover/info:visible group-focus-within/info:opacity-100 group-focus-within/info:visible transition-opacity z-40 pointer-events-none"
+            >
+              Exclude transactions from matching. Choose which side to exclude: ledger, bank, or both.
+            </span>
+          </span>
+          <button className="btn-secondary flex items-center justify-center w-full relative">
+            <Ban className="w-5 h-5 mr-2" />
+            Exclude
+            <ChevronDown className="w-3 h-3 ml-1" />
+          </button>
+          {/* Dropdown menu */}
+          <div className="absolute top-full left-0 mt-1 w-48 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200 z-[100]">
+            <div className="bg-white border border-gray-300 rounded-lg shadow-xl">
+              <button
+                onClick={() => onAction('exclude_ledger')}
+                className="w-full text-left px-4 py-2 hover:bg-blue-50 transition-colors text-sm flex items-center gap-2"
+              >
+                <span>📒</span>
+                Exclude Ledger
+              </button>
+              <button
+                onClick={() => onAction('exclude_bank')}
+                disabled={!match.bank_txn}
+                className="w-full text-left px-4 py-2 hover:bg-blue-50 disabled:opacity-50 transition-colors text-sm flex items-center gap-2"
+              >
+                <span>🏦</span>
+                Exclude Bank
+              </button>
+              <button
+                onClick={() => onAction('exclude_both')}
+                disabled={!match.bank_txn}
+                className="w-full text-left px-4 py-2 hover:bg-blue-50 disabled:opacity-50 transition-colors text-sm flex items-center gap-2"
+              >
+                <span>📒🏦</span>
+                Exclude Both
+              </button>
+            </div>
+          </div>
+        </div>
+        {/* Skip button with tooltip */}
+        <div className="relative">
+          <span className="absolute -top-1 -left-1 z-10 group/info">
+            <button
+              type="button"
+              aria-label="Help: Skip"
+              className="p-0.5 rounded-full bg-white border border-gray-300 text-gray-400 hover:text-primary-blue hover:bg-blue-100 transition-colors focus:outline-none focus:ring-1 focus:ring-primary-blue focus:ring-offset-1"
+            >
+              <Info className="w-3.5 h-3.5" />
+            </button>
+            <span
+              role="tooltip"
+              className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 w-56 px-2.5 py-2 text-xs font-normal text-white bg-gray-800 rounded shadow-lg opacity-0 invisible group-hover/info:opacity-100 group-hover/info:visible group-focus-within/info:opacity-100 group-focus-within/info:visible transition-opacity z-20 pointer-events-none"
+            >
+              Skip this match for now. It will remain available for review later.
+            </span>
+          </span>
+          <button
+            onClick={() => onAction('skip')}
+            className="btn-secondary flex items-center justify-center w-full"
+          >
+            <SkipForward className="w-5 h-5 mr-2" />
+            Skip
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -238,7 +238,7 @@ const Matching = () => {
     }
   };
 
-  const handleMatchAction = async (action: 'match' | 'reject' | 'duplicate' | 'skip') => {
+  const handleMatchAction = async (action: 'match' | 'reject' | 'exclude_ledger' | 'exclude_bank' | 'exclude_both' | 'skip') => {
     setIsSubmitting(true);
     try {
       await submitMatchAction(action, matchIndex);

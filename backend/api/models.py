@@ -39,7 +39,7 @@ class Transaction(BaseModel):
 
 class MatchAction(BaseModel):
     """Action on a match."""
-    action: str  # 'match', 'reject', 'duplicate', 'skip'
+    action: str  # 'match', 'reject', 'exclude_ledger', 'exclude_bank', 'exclude_both', 'skip'
     match_index: int
     notes: Optional[str] = None
 

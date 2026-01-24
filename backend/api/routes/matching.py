@@ -33,6 +33,8 @@ match_state: Dict[str, Any] = {
     'skipped_matches': [],
     'matched_bank_ids': set(),
     'matched_ledger_ids': set(),
+    'excluded_ledger_ids': set(),
+    'excluded_bank_ids': set(),
     'audit_trail': [],
     # Async matching state
     'matching_in_progress': False,
@@ -62,10 +64,18 @@ def run_matching_async(config: MatchingConfig):
         with match_state_lock:
             ledger_txns = list(match_state['normalized_ledger'])
             bank_txns = list(match_state['normalized_bank'])
+            # Read excluded IDs inside lock to avoid race condition
+            excluded_ledger_ids = set(match_state.get('excluded_ledger_ids', []))
+            excluded_bank_ids = set(match_state.get('excluded_bank_ids', []))
+            
+            # Calculate total as count of non-excluded ledger transactions
+            # This ensures progress can reach 100% when all non-excluded transactions are processed
+            non_excluded_count = sum(1 for txn in ledger_txns if txn['id'] not in excluded_ledger_ids)
+            
             match_state['matching_in_progress'] = True
             match_state['matching_paused'] = False
             match_state['matching_progress'] = 0
-            match_state['matching_total'] = len(ledger_txns)
+            match_state['matching_total'] = non_excluded_count
             match_state['matching_error'] = None
             # Reset results
             match_state['match_results'] = []
@@ -81,19 +91,32 @@ def run_matching_async(config: MatchingConfig):
         
         matched_bank_ids = set()
         
+        # Filter out excluded bank transactions from the bank list
+        bank_txns_filtered = [bt for bt in bank_txns if bt['id'] not in excluded_bank_ids]
+        
+        # Track actual processed count (not loop index) for accurate progress
+        processed_count = 0
+        
         for i, ledger_txn in enumerate(ledger_txns):
+            # Skip excluded ledger transactions
+            if ledger_txn['id'] in excluded_ledger_ids:
+                continue
+            
+            # Increment processed count only when we actually process a transaction
+            processed_count += 1
+            
             # Check if paused - wait until resumed
             if not wait_if_paused():
                 return  # Matching was stopped
             
-            # Update progress
+            # Update progress with actual processed count
             with match_state_lock:
-                match_state['matching_progress'] = i + 1
+                match_state['matching_progress'] = processed_count
             
             # Step 1: Heuristics find top candidates
             candidates = engine.find_candidates(
                 ledger_txn, 
-                bank_txns, 
+                bank_txns_filtered, 
                 matched_bank_ids,
                 top_k=5
             )
@@ -197,11 +220,16 @@ async def run_matching_async_endpoint(request: RunMatchingRequest):
                 "total": match_state['matching_total'],
             }
         
+        # Read excluded IDs inside lock to calculate accurate total
+        excluded_ledger_ids = set(match_state.get('excluded_ledger_ids', []))
+        # Calculate total as count of non-excluded ledger transactions
+        non_excluded_count = sum(1 for txn in ledger_txns if txn['id'] not in excluded_ledger_ids)
+        
         # Set matching_in_progress BEFORE starting thread to prevent race condition
         match_state['matching_in_progress'] = True
         match_state['matching_paused'] = False
         match_state['matching_progress'] = 0
-        match_state['matching_total'] = len(ledger_txns)
+        match_state['matching_total'] = non_excluded_count
         match_state['matching_error'] = None
         # Reset results
         match_state['match_results'] = []
@@ -429,10 +457,28 @@ async def submit_match_action(action: MatchAction):
                 'bank_txn': result.get('bank_txn'),
                 'timestamp': timestamp,
             })
-        elif action.action == 'duplicate':
+        elif action.action in ('exclude_ledger', 'exclude_bank', 'exclude_both'):
+            # Determine which side(s) to exclude
+            exclude_ledger = action.action in ('exclude_ledger', 'exclude_both')
+            exclude_bank = action.action in ('exclude_bank', 'exclude_both')
+            
+            # Add to excluded sets
+            if exclude_ledger:
+                if not isinstance(match_state['excluded_ledger_ids'], set):
+                    match_state['excluded_ledger_ids'] = set(match_state.get('excluded_ledger_ids', []))
+                match_state['excluded_ledger_ids'].add(result['ledger_txn']['id'])
+            
+            if exclude_bank and result.get('bank_txn'):
+                if not isinstance(match_state['excluded_bank_ids'], set):
+                    match_state['excluded_bank_ids'] = set(match_state.get('excluded_bank_ids', []))
+                match_state['excluded_bank_ids'].add(result['bank_txn']['id'])
+            
+            # Store in flagged_duplicates with metadata
             match_state['flagged_duplicates'].append({
                 'ledger_txn': result['ledger_txn'],
                 'bank_txn': result.get('bank_txn'),
+                'exclude_ledger': exclude_ledger,
+                'exclude_bank': exclude_bank,
                 'timestamp': timestamp,
             })
         elif action.action == 'skip':
@@ -538,6 +584,12 @@ async def set_transactions(request: Dict[str, Any]):
         match_state['skipped_matches'] = []
         match_state['matched_bank_ids'] = set()
         match_state['matched_ledger_ids'] = set()
+        # Do NOT reset excluded_ledger_ids and excluded_bank_ids - preserve user exclusions
+        # Only initialize if they don't exist
+        if 'excluded_ledger_ids' not in match_state:
+            match_state['excluded_ledger_ids'] = set()
+        if 'excluded_bank_ids' not in match_state:
+            match_state['excluded_bank_ids'] = set()
         match_state['audit_trail'] = []
     
     return {"success": True, "ledger_count": len(ledger), "bank_count": len(bank)}

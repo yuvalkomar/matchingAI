@@ -79,7 +79,7 @@ const Review = () => {
     }
   };
 
-  const handleAction = async (action: 'match' | 'reject' | 'duplicate' | 'skip') => {
+  const handleAction = async (action: 'match' | 'reject' | 'exclude_ledger' | 'exclude_bank' | 'exclude_both' | 'skip') => {
     setIsSubmitting(true);
     try {
       await submitMatchAction(action, matchIndex);
