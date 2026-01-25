@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  getStats, 
-  getUnmatchedLedger, 
-  getUnmatchedBank, 
+import {
+  getStats,
+  getUnmatchedLedger,
+  getUnmatchedBank,
   getConfirmedMatches,
   getNextMatch,
   getPendingMatches,
@@ -22,10 +22,10 @@ import {
 import { Transaction, MatchResult, MatchingConfig } from '../types';
 import MatchReviewModal from '../components/MatchReviewModal';
 import { CountBadge } from '../components/CountBadge';
-import { 
-  Download, 
-  RefreshCw, 
-  CheckCircle2, 
+import {
+  Download,
+  RefreshCw,
+  CheckCircle2,
   ArrowLeftRight,
   Settings,
   Eye,
@@ -59,18 +59,19 @@ interface MatchingProgress {
 
 const Matching = () => {
   const navigate = useNavigate();
-  
+
   // Data state
   const [unmatchedLedger, setUnmatchedLedger] = useState<Transaction[]>([]);
   const [unmatchedBank, setUnmatchedBank] = useState<Transaction[]>([]);
   const [confirmedMatches, setConfirmedMatches] = useState<ConfirmedMatch[]>([]);
   const [stats, setStats] = useState<any>(null);
-  
+
   // Matching progress state
   const [matchingProgress, setMatchingProgress] = useState<MatchingProgress | null>(null);
   const [pendingMatchesList, setPendingMatchesList] = useState<{ index: number; match: MatchResult }[]>([]);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  
+  const pollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isPollingActiveRef = useRef(false); // Controls whether polling should continue
+
   // Review modal state
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [currentMatch, setCurrentMatch] = useState<MatchResult | null>(null);
@@ -78,11 +79,11 @@ const Matching = () => {
   const [totalPending, setTotalPending] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [reviewReadOnly, setReviewReadOnly] = useState(false);
-  
+
   // Quick action state - track pending actions and hover states
   const [pendingActions, setPendingActions] = useState<Map<string, 'approve' | 'reject'>>(new Map());
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
-  
+
   // Settings panel state
   const [showSettings, setShowSettings] = useState(false);
   const [matchingConfig, setMatchingConfig] = useState<MatchingConfig>({
@@ -91,11 +92,11 @@ const Matching = () => {
     date_window: 3,
     require_reference: false,
   });
-  
+
   // Loading states
   const [isRerunning, setIsRerunning] = useState(false);
 
-  // Poll for matching progress
+  // Poll for matching progress - now uses recursion for better control
   const fetchPending = useCallback(async () => {
     try {
       const { matches } = await getPendingMatches();
@@ -105,31 +106,74 @@ const Matching = () => {
     }
   }, []);
 
-  const pollProgress = useCallback(async () => {
-    try {
-      const progress = await getMatchingProgress();
-      setMatchingProgress(progress);
-      
-      // Stop polling if matching is not in progress, or is paused, or has completed
-      if (!progress.in_progress || progress.paused) {
-        if (pollingRef.current) {
-          clearInterval(pollingRef.current);
-          pollingRef.current = null;
+  // Schedule the next poll using setTimeout (not setInterval)
+  const scheduleNextPoll = useCallback(() => {
+    // Clear any existing timeout first
+    if (pollingTimeoutRef.current) {
+      clearTimeout(pollingTimeoutRef.current);
+      pollingTimeoutRef.current = null;
+    }
+
+    // Only schedule if polling is still active
+    if (isPollingActiveRef.current) {
+      pollingTimeoutRef.current = setTimeout(async () => {
+        // Double-check before making the request
+        if (!isPollingActiveRef.current) {
+          return;
         }
-        // Reload data when matching stops
-        if (!progress.in_progress && progress.total > 0) {
-          await loadAllData();
+
+        try {
+          const progress = await getMatchingProgress();
+
+          // Check again after async call
+          if (!isPollingActiveRef.current) {
+            return;
+          }
+
+          setMatchingProgress(progress);
+
+          // Stop polling if matching is not in progress or is paused
+          if (!progress.in_progress || progress.paused) {
+            isPollingActiveRef.current = false;
+            // Reload data when matching completes
+            if (!progress.in_progress && progress.total > 0) {
+              await loadAllData();
+            }
+            return; // Don't schedule next poll
+          }
+
+          // Fetch pending matches
+          await fetchPending();
+
+          // Schedule next poll only if still active
+          scheduleNextPoll();
+        } catch (error) {
+          console.error('Failed to poll progress:', error);
+          // Still try to continue polling on error
+          if (isPollingActiveRef.current) {
+            scheduleNextPoll();
+          }
         }
-        // Don't fetch pending when paused or stopped
-        return;
-      }
-      
-      // Only fetch pending when actively matching
-      await fetchPending();
-    } catch (error) {
-      console.error('Failed to poll progress:', error);
+      }, 1000);
     }
   }, [fetchPending]);
+
+  // Start polling function
+  const startPolling = useCallback(() => {
+    if (!isPollingActiveRef.current) {
+      isPollingActiveRef.current = true;
+      scheduleNextPoll();
+    }
+  }, [scheduleNextPoll]);
+
+  // Stop polling function
+  const stopPolling = useCallback(() => {
+    isPollingActiveRef.current = false;
+    if (pollingTimeoutRef.current) {
+      clearTimeout(pollingTimeoutRef.current);
+      pollingTimeoutRef.current = null;
+    }
+  }, []);
 
   const loadAllData = useCallback(async () => {
     try {
@@ -140,7 +184,7 @@ const Matching = () => {
         getConfirmedMatches(),
         getPendingMatches().catch(() => ({ matches: [] })),
       ]);
-      
+
       setStats(statsData);
       setUnmatchedLedger(ledgerData.transactions);
       setUnmatchedBank(bankData.transactions);
@@ -159,27 +203,26 @@ const Matching = () => {
         const progress = await getMatchingProgress();
         setMatchingProgress(progress);
         await fetchPending();
-        
+
         // Only start polling if matching is actively in progress and not paused
         if (progress.in_progress && !progress.paused) {
-          pollingRef.current = setInterval(pollProgress, 1000);
+          startPolling();
         }
       } catch (error) {
         console.error('Failed to get initial progress:', error);
       }
     };
-    
+
     initPolling();
-    
+
     // Load initial data
     loadAllData();
-    
+
     return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-      }
+      stopPolling();
     };
-  }, [loadAllData, pollProgress, fetchPending]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleStartReview = async () => {
     try {
@@ -242,7 +285,7 @@ const Matching = () => {
     setIsSubmitting(true);
     try {
       await submitMatchAction(action, matchIndex);
-      
+
       // Get next match
       const response = await getNextMatch();
       if ('done' in response && response.done) {
@@ -295,16 +338,16 @@ const Matching = () => {
 
   const handleQuickAction = async (cardId: string, index: number, action: 'approve' | 'reject', isApproved: boolean = false, approvedMatch?: ConfirmedMatch) => {
     if (isSubmitting) return;
-    
+
     // For approved matches, approve action doesn't make sense (already approved)
     if (isApproved && action === 'approve') {
       return;
     }
-    
+
     setIsSubmitting(true);
     // Set pending action state
     setPendingActions(prev => new Map(prev).set(cardId, action));
-    
+
     try {
       if (!isApproved) {
         // For pending matches, seek to index first
@@ -316,10 +359,10 @@ const Matching = () => {
           await rejectApprovedMatch(approvedMatch.ledger_txn.id, approvedMatch.bank_txn.id);
         }
       }
-      
+
       // Reload data to reflect changes
       await loadAllData();
-      
+
       // Clear pending action and hover state after UI updates
       // The card will update its appearance based on the new data
       setTimeout(() => {
@@ -346,13 +389,13 @@ const Matching = () => {
 
   const handlePauseMatching = async () => {
     try {
-      // Stop polling immediately to prevent further requests
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
+      // Stop polling IMMEDIATELY - synchronous operation
+      stopPolling();
+
       await pauseMatching();
-      await pollProgress(); // Update state immediately
+      // Fetch updated state directly
+      const progress = await getMatchingProgress();
+      setMatchingProgress(progress);
     } catch (error: any) {
       alert(`Pause failed: ${error.response?.data?.detail || error.message}`);
     }
@@ -361,11 +404,11 @@ const Matching = () => {
   const handleResumeMatching = async () => {
     try {
       await resumeMatching();
-      // Restart polling when resuming
-      if (!pollingRef.current) {
-        pollingRef.current = setInterval(pollProgress, 1000);
-      }
-      await pollProgress(); // Update state immediately
+      // Start polling
+      startPolling();
+      // Fetch updated state directly
+      const progress = await getMatchingProgress();
+      setMatchingProgress(progress);
     } catch (error: any) {
       alert(`Resume failed: ${error.response?.data?.detail || error.message}`);
     }
@@ -376,10 +419,8 @@ const Matching = () => {
     try {
       // Start async matching
       await runMatchingAsync(matchingConfig);
-      // Start polling again
-      if (!pollingRef.current) {
-        pollingRef.current = setInterval(pollProgress, 1000);
-      }
+      // Start polling
+      startPolling();
       // Reset isRerunning after successfully starting matching
       setIsRerunning(false);
     } catch (error: any) {
@@ -392,7 +433,7 @@ const Matching = () => {
     try {
       let blob: Blob;
       let filename: string;
-      
+
       switch (type) {
         case 'matches':
           blob = await exportMatches();
@@ -411,7 +452,7 @@ const Matching = () => {
           filename = 'audit_trail.json';
           break;
       }
-      
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -441,8 +482,8 @@ const Matching = () => {
 
   const isMatchingInProgress = matchingProgress?.in_progress || false;
   const isMatchingPaused = matchingProgress?.paused || false;
-  const progressPercent = matchingProgress?.total 
-    ? Math.round((matchingProgress.progress / matchingProgress.total) * 100) 
+  const progressPercent = matchingProgress?.total
+    ? Math.round((matchingProgress.progress / matchingProgress.total) * 100)
     : 0;
 
   const approvedCount = confirmedMatches.length;
@@ -511,7 +552,7 @@ const Matching = () => {
               Settings
             </button>
             <div className="relative group z-[100]">
-              <button 
+              <button
                 disabled={showReviewModal}
                 className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-gold to-yellow-500 text-primary-blue rounded-xl hover:shadow-xl hover:scale-105 transition-all duration-300 font-bold text-sm shadow-lg disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-lg"
               >
@@ -618,7 +659,7 @@ const Matching = () => {
 
         {/* Main Content - 3 Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6" style={{ minHeight: 'calc(100vh - 280px)' }}>
-          
+
           {/* Left Column - Unmatched Ledger */}
           <div className="rounded-2xl border border-blue-300/50 bg-white/80 backdrop-blur-sm shadow-2xl overflow-hidden flex flex-col hover:shadow-3xl transition-shadow duration-300">
             <div className="bg-gradient-to-r from-primary-blue/10 to-blue-100/50 border-b border-blue-300/50 px-4 py-3 flex items-center justify-between min-h-[60px]">
@@ -716,165 +757,69 @@ const Matching = () => {
 
               {/* Pending first (asc by suggestion order), then approved (desc by approval time) */}
               {(pendingMatchesList.length > 0 || approvedSorted.length > 0) && (
-              <div className="space-y-2">
-                {pendingMatchesList.map(({ index, match }) => {
-                  const cardId = `pending-${index}`;
-                  const isHovered = hoveredCard === cardId;
-                  const pendingAction = pendingActions.get(cardId);
-                  const hasAction = pendingAction !== undefined;
-                  
-                  return (
-                    <div
-                      key={cardId}
-                      className="relative w-full bg-blue-50/50 border border-blue-200/50 rounded-lg text-sm hover:bg-blue-50 hover:border-blue-300/60 transition-all duration-200 overflow-hidden"
-                      onMouseEnter={() => setHoveredCard(cardId)}
-                      onMouseLeave={() => {
-                        if (!hasAction) {
-                          setHoveredCard(null);
-                        }
-                      }}
-                    >
-                      {/* Quick action buttons - shown on hover */}
-                      <div className={`absolute left-2 top-1/2 -translate-y-1/2 w-7 flex flex-col gap-1 transition-opacity duration-200 ${isHovered || hasAction ? 'opacity-100' : 'opacity-0'}`}>
-                        {/* Approve button (top) */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleQuickAction(cardId, index, 'approve', false);
-                          }}
-                          disabled={isSubmitting || !match.bank_txn}
-                          className={`w-7 h-7 flex items-center justify-center rounded-md border transition-all duration-200 ${
-                            pendingAction === 'approve'
+                <div className="space-y-2">
+                  {pendingMatchesList.map(({ index, match }) => {
+                    const cardId = `pending-${index}`;
+                    const isHovered = hoveredCard === cardId;
+                    const pendingAction = pendingActions.get(cardId);
+                    const hasAction = pendingAction !== undefined;
+
+                    return (
+                      <div
+                        key={cardId}
+                        className="relative w-full bg-blue-50/50 border border-blue-200/50 rounded-lg text-sm hover:bg-blue-50 hover:border-blue-300/60 transition-all duration-200 overflow-hidden"
+                        onMouseEnter={() => setHoveredCard(cardId)}
+                        onMouseLeave={() => {
+                          if (!hasAction) {
+                            setHoveredCard(null);
+                          }
+                        }}
+                      >
+                        {/* Quick action buttons - shown on hover */}
+                        <div className={`absolute left-2 top-1/2 -translate-y-1/2 w-7 flex flex-col gap-1 transition-opacity duration-200 ${isHovered || hasAction ? 'opacity-100' : 'opacity-0'}`}>
+                          {/* Approve button (top) */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleQuickAction(cardId, index, 'approve', false);
+                            }}
+                            disabled={isSubmitting || !match.bank_txn}
+                            className={`w-7 h-7 flex items-center justify-center rounded-md border transition-all duration-200 ${pendingAction === 'approve'
                               ? 'bg-transparent border-green-500'
                               : 'bg-green-500/20 hover:bg-green-500/30 border-green-500/60 hover:border-green-500'
-                          } ${!match.bank_txn ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                        >
-                          {pendingAction === 'approve' ? (
-                            <Check className="w-3.5 h-3.5 text-green-600" />
-                          ) : null}
-                        </button>
-                        {/* Reject button (bottom) */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleQuickAction(cardId, index, 'reject', false);
-                          }}
-                          disabled={isSubmitting}
-                          className={`w-7 h-7 flex items-center justify-center rounded-md border transition-all duration-200 ${
-                            pendingAction === 'reject'
+                              } ${!match.bank_txn ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
+                            {pendingAction === 'approve' ? (
+                              <Check className="w-3.5 h-3.5 text-green-600" />
+                            ) : null}
+                          </button>
+                          {/* Reject button (bottom) */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleQuickAction(cardId, index, 'reject', false);
+                            }}
+                            disabled={isSubmitting}
+                            className={`w-7 h-7 flex items-center justify-center rounded-md border transition-all duration-200 ${pendingAction === 'reject'
                               ? 'bg-transparent border-red-500'
                               : 'bg-red-500/20 hover:bg-red-500/30 border-red-500/60 hover:border-red-500'
-                          } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                        >
-                          {pendingAction === 'reject' ? (
-                            <X className="w-3.5 h-3.5 text-red-600" />
-                          ) : null}
-                        </button>
-                      </div>
-                      
-                      {/* Card content - shifts right on hover */}
-                      <button
-                        type="button"
-                        onClick={() => handleOpenReviewForMatch(index, false)}
-                        className={`w-full text-left p-3 transition-all duration-200 ${
-                          isHovered || hasAction ? 'pl-11' : 'pl-3'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-text-primary truncate">{match.ledger_txn.vendor}</div>
-                            <div className="text-xs text-text-secondary">{formatDate(match.ledger_txn.date)}</div>
-                          </div>
-                          <ArrowLeftRight className="w-4 h-4 text-primary-blue flex-shrink-0" />
-                          <div className="flex-1 min-w-0 text-right">
-                            <div className="font-medium text-text-primary truncate">{match.bank_txn?.vendor || '-'}</div>
-                            <div className="text-xs text-text-secondary">{match.bank_txn ? formatDate(match.bank_txn.date) : '-'}</div>
-                          </div>
+                              } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
+                            {pendingAction === 'reject' ? (
+                              <X className="w-3.5 h-3.5 text-red-600" />
+                            ) : null}
+                          </button>
                         </div>
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-semibold">{formatCurrency(match.ledger_txn.amount)}</span>
-                          <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
-                            {(match.confidence * 100).toFixed(0)}%
-                          </span>
-                          <span className="font-semibold">{match.bank_txn ? formatCurrency(match.bank_txn.amount) : '-'}</span>
-                        </div>
-                      </button>
-                    </div>
-                  );
-                })}
-                {approvedSorted.map((match) => {
-                  const cardId = `approved-${match.ledger_txn.id}-${match.bank_txn.id}`;
-                  const isHovered = hoveredCard === cardId;
-                  const pendingAction = pendingActions.get(cardId);
-                  const hasAction = pendingAction !== undefined;
-                  
-                  return (
-                    <div
-                      key={cardId}
-                      className="relative w-full bg-green-50/70 border border-green-200/60 rounded-lg text-sm hover:bg-green-50 hover:border-green-300/70 transition-all duration-200 overflow-hidden"
-                      onMouseEnter={() => setHoveredCard(cardId)}
-                      onMouseLeave={() => {
-                        if (!hasAction) {
-                          setHoveredCard(null);
-                        }
-                      }}
-                    >
-                      {/* Quick action buttons - shown on hover */}
-                      <div className={`absolute left-2 top-1/2 -translate-y-1/2 w-7 flex flex-col gap-1 transition-opacity duration-200 ${isHovered || hasAction ? 'opacity-100' : 'opacity-0'}`}>
-                        {/* Approve button (top) - always shows check icon for approved cards */}
+
+                        {/* Card content - shifts right on hover */}
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleQuickAction(cardId, 0, 'approve', true);
-                          }}
-                          disabled={isSubmitting}
-                          className={`w-7 h-7 flex items-center justify-center rounded-md border transition-all duration-200 ${
-                            pendingAction === 'approve'
-                              ? 'bg-transparent border-green-500'
-                              : 'bg-green-500/20 hover:bg-green-500/30 border-green-500/60 hover:border-green-500'
-                          } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                          onClick={() => handleOpenReviewForMatch(index, false)}
+                          className={`w-full text-left p-3 transition-all duration-200 ${isHovered || hasAction ? 'pl-11' : 'pl-3'
+                            }`}
                         >
-                          {/* Always show check icon when hovered (approved card) or when action is approve */}
-                          {(isHovered || pendingAction === 'approve') && (
-                            <Check className="w-3.5 h-3.5 text-green-600" />
-                          )}
-                        </button>
-                        {/* Reject button (bottom) */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleQuickAction(cardId, 0, 'reject', true, match);
-                          }}
-                          disabled={isSubmitting}
-                          className={`w-7 h-7 flex items-center justify-center rounded-md border transition-all duration-200 ${
-                            pendingAction === 'reject'
-                              ? 'bg-transparent border-red-500'
-                              : 'bg-red-500/20 hover:bg-red-500/30 border-red-500/60 hover:border-red-500'
-                          } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                        >
-                          {pendingAction === 'reject' ? (
-                            <X className="w-3.5 h-3.5 text-red-600" />
-                          ) : null}
-                        </button>
-                      </div>
-                      
-                      {/* Card content - shifts right on hover */}
-                      <button
-                        type="button"
-                        onClick={() => handleOpenReviewForMatch(0, true, match)}
-                        className={`w-full text-left p-3 transition-all duration-200 flex items-center gap-2 ${
-                          isHovered || hasAction ? 'pl-11' : 'pl-3'
-                        }`}
-                      >
-                        {/* Green check icon - only shown when not hovered */}
-                        {!isHovered && !hasAction && (
-                          <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
-                        )}
-                        <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
                             <div className="flex-1 min-w-0">
                               <div className="font-medium text-text-primary truncate">{match.ledger_txn.vendor}</div>
@@ -882,23 +827,113 @@ const Matching = () => {
                             </div>
                             <ArrowLeftRight className="w-4 h-4 text-primary-blue flex-shrink-0" />
                             <div className="flex-1 min-w-0 text-right">
-                              <div className="font-medium text-text-primary truncate">{match.bank_txn.vendor}</div>
-                              <div className="text-xs text-text-secondary">{formatDate(match.bank_txn.date)}</div>
+                              <div className="font-medium text-text-primary truncate">{match.bank_txn?.vendor || '-'}</div>
+                              <div className="text-xs text-text-secondary">{match.bank_txn ? formatDate(match.bank_txn.date) : '-'}</div>
                             </div>
                           </div>
                           <div className="flex justify-between items-center text-xs">
                             <span className="font-semibold">{formatCurrency(match.ledger_txn.amount)}</span>
-                            <span className={`px-2 py-0.5 rounded font-medium ${match.confidence >= 0.8 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                            <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
                               {(match.confidence * 100).toFixed(0)}%
                             </span>
-                            <span className="font-semibold">{formatCurrency(match.bank_txn.amount)}</span>
+                            <span className="font-semibold">{match.bank_txn ? formatCurrency(match.bank_txn.amount) : '-'}</span>
                           </div>
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {approvedSorted.map((match) => {
+                    const cardId = `approved-${match.ledger_txn.id}-${match.bank_txn.id}`;
+                    const isHovered = hoveredCard === cardId;
+                    const pendingAction = pendingActions.get(cardId);
+                    const hasAction = pendingAction !== undefined;
+
+                    return (
+                      <div
+                        key={cardId}
+                        className="relative w-full bg-green-50/70 border border-green-200/60 rounded-lg text-sm hover:bg-green-50 hover:border-green-300/70 transition-all duration-200 overflow-hidden"
+                        onMouseEnter={() => setHoveredCard(cardId)}
+                        onMouseLeave={() => {
+                          if (!hasAction) {
+                            setHoveredCard(null);
+                          }
+                        }}
+                      >
+                        {/* Quick action buttons - shown on hover */}
+                        <div className={`absolute left-2 top-1/2 -translate-y-1/2 w-7 flex flex-col gap-1 transition-opacity duration-200 ${isHovered || hasAction ? 'opacity-100' : 'opacity-0'}`}>
+                          {/* Approve button (top) - always shows check icon for approved cards */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleQuickAction(cardId, 0, 'approve', true);
+                            }}
+                            disabled={isSubmitting}
+                            className={`w-7 h-7 flex items-center justify-center rounded-md border transition-all duration-200 ${pendingAction === 'approve'
+                              ? 'bg-transparent border-green-500'
+                              : 'bg-green-500/20 hover:bg-green-500/30 border-green-500/60 hover:border-green-500'
+                              } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
+                            {/* Always show check icon when hovered (approved card) or when action is approve */}
+                            {(isHovered || pendingAction === 'approve') && (
+                              <Check className="w-3.5 h-3.5 text-green-600" />
+                            )}
+                          </button>
+                          {/* Reject button (bottom) */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleQuickAction(cardId, 0, 'reject', true, match);
+                            }}
+                            disabled={isSubmitting}
+                            className={`w-7 h-7 flex items-center justify-center rounded-md border transition-all duration-200 ${pendingAction === 'reject'
+                              ? 'bg-transparent border-red-500'
+                              : 'bg-red-500/20 hover:bg-red-500/30 border-red-500/60 hover:border-red-500'
+                              } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
+                            {pendingAction === 'reject' ? (
+                              <X className="w-3.5 h-3.5 text-red-600" />
+                            ) : null}
+                          </button>
                         </div>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+
+                        {/* Card content - shifts right on hover */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReviewForMatch(0, true, match)}
+                          className={`w-full text-left p-3 transition-all duration-200 flex items-center gap-2 ${isHovered || hasAction ? 'pl-11' : 'pl-3'
+                            }`}
+                        >
+                          {/* Green check icon - only shown when not hovered */}
+                          {!isHovered && !hasAction && (
+                            <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-text-primary truncate">{match.ledger_txn.vendor}</div>
+                                <div className="text-xs text-text-secondary">{formatDate(match.ledger_txn.date)}</div>
+                              </div>
+                              <ArrowLeftRight className="w-4 h-4 text-primary-blue flex-shrink-0" />
+                              <div className="flex-1 min-w-0 text-right">
+                                <div className="font-medium text-text-primary truncate">{match.bank_txn.vendor}</div>
+                                <div className="text-xs text-text-secondary">{formatDate(match.bank_txn.date)}</div>
+                              </div>
+                            </div>
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-semibold">{formatCurrency(match.ledger_txn.amount)}</span>
+                              <span className={`px-2 py-0.5 rounded font-medium ${match.confidence >= 0.8 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                {(match.confidence * 100).toFixed(0)}%
+                              </span>
+                              <span className="font-semibold">{formatCurrency(match.bank_txn.amount)}</span>
+                            </div>
+                          </div>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
@@ -946,7 +981,7 @@ const Matching = () => {
             </div>
           </div>
         </div>
-        
+
         {/* Back to Import */}
         <div className="mt-6 text-center">
           <button
@@ -975,7 +1010,7 @@ const Matching = () => {
           readOnly={reviewReadOnly}
         />
       )}
-      
+
       {/* Waiting for more matches modal */}
       {showReviewModal && !currentMatch && isMatchingInProgress && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
