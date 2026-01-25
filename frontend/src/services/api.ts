@@ -184,3 +184,28 @@ export const exportAuditTrail = async (): Promise<Blob> => {
   });
   return response.data;
 };
+
+export interface RejectedMatch {
+  ledger_txn: Transaction;
+  bank_txn: Transaction | null;
+  confidence: number;
+  heuristic_score: number;
+  llm_explanation: string;
+  component_scores: Record<string, number>;
+  timestamp: string;
+  ledger_available: boolean;
+  bank_available: boolean;
+  can_restore: boolean;
+}
+
+export const getRejectedMatches = async (): Promise<{ rejected_matches: RejectedMatch[]; count: number }> => {
+  const response = await api.get('/match/rejected');
+  return response.data;
+};
+
+export const restoreRejectedMatch = async (ledgerId: string, bankId: string): Promise<void> => {
+  await api.post('/match/restore-rejected', {
+    ledger_id: ledgerId,
+    bank_id: bankId,
+  });
+};

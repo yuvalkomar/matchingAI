@@ -455,6 +455,10 @@ async def submit_match_action(action: MatchAction):
             match_state['rejected_matches'].append({
                 'ledger_txn': result['ledger_txn'],
                 'bank_txn': result.get('bank_txn'),
+                'confidence': result.get('confidence', 0.0),
+                'heuristic_score': result.get('heuristic_score', 0.0),
+                'llm_explanation': result.get('llm_explanation', ''),
+                'component_scores': result.get('component_scores', {}),
                 'timestamp': timestamp,
             })
         elif action.action in ('exclude_ledger', 'exclude_bank', 'exclude_both'):
@@ -528,10 +532,14 @@ async def reject_approved_match(request: Dict[str, Any]):
         
         timestamp = datetime.now().isoformat()
         
-        # Add to rejected_matches
+        # Add to rejected_matches (preserve original match details)
         match_state['rejected_matches'].append({
             'ledger_txn': match_to_reject['ledger_txn'],
             'bank_txn': match_to_reject['bank_txn'],
+            'confidence': match_to_reject.get('confidence', 0.0),
+            'heuristic_score': match_to_reject.get('heuristic_score', 0.0),
+            'llm_explanation': match_to_reject.get('llm_explanation', ''),
+            'component_scores': match_to_reject.get('component_scores', {}),
             'timestamp': timestamp,
         })
         
@@ -609,3 +617,120 @@ async def get_stats():
             "total_ledger": len(match_state['normalized_ledger']),
             "total_bank": len(match_state['normalized_bank']),
         }
+
+
+@router.get("/rejected")
+async def get_rejected_matches():
+    """Get all rejected matches with availability status for each."""
+    with match_state_lock:
+        rejected = match_state['rejected_matches']
+        matched_ledger_ids = match_state['matched_ledger_ids']
+        matched_bank_ids = match_state['matched_bank_ids']
+        
+        # Ensure sets
+        if not isinstance(matched_ledger_ids, set):
+            matched_ledger_ids = set(matched_ledger_ids) if matched_ledger_ids else set()
+        if not isinstance(matched_bank_ids, set):
+            matched_bank_ids = set(matched_bank_ids) if matched_bank_ids else set()
+        
+        result = []
+        for match in rejected:
+            ledger_id = match['ledger_txn']['id']
+            bank_id = match['bank_txn']['id'] if match.get('bank_txn') else None
+            
+            ledger_available = ledger_id not in matched_ledger_ids
+            bank_available = bank_id not in matched_bank_ids if bank_id else False
+            can_restore = ledger_available and bank_available
+            
+            result.append({
+                'ledger_txn': match['ledger_txn'],
+                'bank_txn': match.get('bank_txn'),
+                'confidence': match.get('confidence', 0.0),
+                'heuristic_score': match.get('heuristic_score', 0.0),
+                'llm_explanation': match.get('llm_explanation', ''),
+                'component_scores': match.get('component_scores', {}),
+                'timestamp': match.get('timestamp'),
+                'ledger_available': ledger_available,
+                'bank_available': bank_available,
+                'can_restore': can_restore,
+            })
+        
+        return {
+            "rejected_matches": result,
+            "count": len(result),
+        }
+
+
+@router.post("/restore-rejected")
+async def restore_rejected_match(request: Dict[str, Any]):
+    """Restore a rejected match by adding it back to the pending review queue."""
+    from datetime import datetime
+    
+    ledger_id = request.get('ledger_id')
+    bank_id = request.get('bank_id')
+    
+    if not ledger_id or not bank_id:
+        raise HTTPException(status_code=400, detail="ledger_id and bank_id are required")
+    
+    with match_state_lock:
+        rejected_matches = match_state['rejected_matches']
+        
+        # Ensure sets
+        if not isinstance(match_state['matched_ledger_ids'], set):
+            match_state['matched_ledger_ids'] = set(match_state['matched_ledger_ids']) if match_state['matched_ledger_ids'] else set()
+        if not isinstance(match_state['matched_bank_ids'], set):
+            match_state['matched_bank_ids'] = set(match_state['matched_bank_ids']) if match_state['matched_bank_ids'] else set()
+        
+        # Check if either side is already matched
+        if ledger_id in match_state['matched_ledger_ids']:
+            raise HTTPException(status_code=400, detail="Ledger transaction is already matched to another bank transaction")
+        if bank_id in match_state['matched_bank_ids']:
+            raise HTTPException(status_code=400, detail="Bank transaction is already matched to another ledger transaction")
+        
+        # Find and remove the match from rejected_matches
+        match_to_restore = None
+        for i, match in enumerate(rejected_matches):
+            if (match['ledger_txn']['id'] == ledger_id and 
+                match.get('bank_txn') and match['bank_txn']['id'] == bank_id):
+                match_to_restore = rejected_matches.pop(i)
+                break
+        
+        if not match_to_restore:
+            raise HTTPException(status_code=404, detail="Rejected match not found")
+        
+        timestamp = datetime.now().isoformat()
+        
+        # Create the match entry for pending review (same format as match_results)
+        restored_match = {
+            'ledger_txn': match_to_restore['ledger_txn'],
+            'bank_txn': match_to_restore['bank_txn'],
+            'confidence': match_to_restore.get('confidence', 0.0),
+            'heuristic_score': match_to_restore.get('heuristic_score', 0.0),
+            'llm_explanation': match_to_restore.get('llm_explanation', ''),
+            'component_scores': match_to_restore.get('component_scores', {}),
+            'candidates': match_to_restore.get('candidates', []),
+        }
+        
+        # Insert at current_index so it appears next in the review queue
+        current_idx = match_state['current_index']
+        match_state['match_results'].insert(current_idx, restored_match)
+        
+        # Record in audit trail
+        audit_entry = {
+            'timestamp': timestamp,
+            'action': 'restore_to_pending',
+            'ledger_id': match_to_restore['ledger_txn']['id'],
+            'bank_id': match_to_restore['bank_txn']['id'],
+            'ledger_vendor': match_to_restore['ledger_txn']['vendor'],
+            'bank_vendor': match_to_restore['bank_txn']['vendor'],
+            'ledger_amount': match_to_restore['ledger_txn']['amount'],
+            'bank_amount': match_to_restore['bank_txn']['amount'],
+            'confidence': match_to_restore.get('confidence', 0.0),
+            'heuristic_score': match_to_restore.get('heuristic_score', 0.0),
+            'llm_explanation': match_to_restore.get('llm_explanation', ''),
+            'notes': 'Restored from rejected to pending review',
+            'matching_config': {},
+        }
+        match_state['audit_trail'].append(audit_entry)
+    
+    return {"success": True, "message": "Match restored to pending review"}

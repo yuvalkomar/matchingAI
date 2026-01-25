@@ -21,6 +21,7 @@ import {
 } from '../services/api';
 import { Transaction, MatchResult, MatchingConfig } from '../types';
 import MatchReviewModal from '../components/MatchReviewModal';
+import RejectedMatchesModal from '../components/RejectedMatchesModal';
 import { CountBadge } from '../components/CountBadge';
 import {
   Download,
@@ -92,6 +93,9 @@ const Matching = () => {
     date_window: 3,
     require_reference: false,
   });
+
+  // Rejected matches modal state
+  const [showRejectedModal, setShowRejectedModal] = useState(false);
 
   // Loading states
   const [isRerunning, setIsRerunning] = useState(false);
@@ -718,7 +722,13 @@ const Matching = () => {
                   {rejectedCount > 0 && (
                     <>
                       <span>•</span>
-                      <span>{rejectedCount} rejected</span>
+                      <button
+                        onClick={() => setShowRejectedModal(true)}
+                        className="hover:text-red-600 hover:underline transition-colors cursor-pointer"
+                        title="Click to view and restore rejected matches"
+                      >
+                        {rejectedCount} rejected
+                      </button>
                     </>
                   )}
                 </div>
@@ -1034,6 +1044,14 @@ const Matching = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Rejected Matches Modal */}
+      {showRejectedModal && (
+        <RejectedMatchesModal
+          onClose={() => setShowRejectedModal(false)}
+          onRestoreComplete={() => loadAllData()}
+        />
       )}
     </div>
   );
