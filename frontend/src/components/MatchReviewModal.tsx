@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, Check, XCircle, Ban, SkipForward, ChevronDown, Info, MessageCircle } from 'lucide-react';
 import { MatchResult } from '../types';
 
@@ -53,6 +53,74 @@ const MatchReviewModal = ({
     reference: 'Reference',
   };
   const getScoreLabel = (key: string) => componentScoreLabel[key] ?? key.replace(/_/g, ' ');
+
+  // Measure Ledger and Bank columns to make them equal width (content-based)
+  const tableRef = useRef<HTMLTableElement>(null);
+  const [ledgerBankWidth, setLedgerBankWidth] = useState<number | null>(null);
+
+  // Reset width when match changes
+  useEffect(() => {
+    setLedgerBankWidth(null);
+  }, [match]);
+
+  useEffect(() => {
+    if (!tableRef.current) return;
+    const table = tableRef.current;
+    
+    const measure = () => {
+      const ledgerCol = table.querySelector('col:nth-child(2)') as HTMLTableColElement;
+      const bankCol = table.querySelector('col:nth-child(3)') as HTMLTableColElement;
+      if (!ledgerCol || !bankCol) return;
+      
+      // Get all cells in each column
+      const ledgerCells = Array.from(table.querySelectorAll('td:nth-child(2), th:nth-child(2)')) as HTMLElement[];
+      const bankCells = Array.from(table.querySelectorAll('td:nth-child(3), th:nth-child(3)')) as HTMLElement[];
+      
+      if (ledgerCells.length === 0 || bankCells.length === 0) return;
+      
+      // Temporarily remove width constraints to measure natural content width
+      const originalLedgerWidth = ledgerCol.style.width;
+      const originalBankWidth = bankCol.style.width;
+      ledgerCol.style.width = 'auto';
+      bankCol.style.width = 'auto';
+      
+      // Force reflow
+      table.offsetHeight;
+      
+      // Measure the widest cell in each column
+      let maxLedgerWidth = 0;
+      let maxBankWidth = 0;
+      
+      ledgerCells.forEach(cell => {
+        // Temporarily remove any width constraints on the cell
+        const cellOriginalWidth = cell.style.width;
+        cell.style.width = '';
+        maxLedgerWidth = Math.max(maxLedgerWidth, cell.scrollWidth);
+        cell.style.width = cellOriginalWidth;
+      });
+      
+      bankCells.forEach(cell => {
+        const cellOriginalWidth = cell.style.width;
+        cell.style.width = '';
+        maxBankWidth = Math.max(maxBankWidth, cell.scrollWidth);
+        cell.style.width = cellOriginalWidth;
+      });
+      
+      // Set both columns to the max of the two
+      const equalWidth = Math.max(maxLedgerWidth, maxBankWidth);
+      if (equalWidth > 0) {
+        setLedgerBankWidth(equalWidth);
+      } else {
+        // Restore original if measurement failed
+        ledgerCol.style.width = originalLedgerWidth;
+        bankCol.style.width = originalBankWidth;
+      }
+    };
+    
+    // Measure after render completes
+    const timeoutId = setTimeout(measure, 100);
+    return () => clearTimeout(timeoutId);
+  }, [match]);
 
   // Handle ESC key press
   useEffect(() => {
@@ -145,70 +213,88 @@ const MatchReviewModal = ({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto overflow-x-auto p-6">
-          {/* Match details: single grid (3×6) so row borders align across Field | Ledger | Bank */}
+          {/* Match details: table with content-based column widths, Ledger/Bank equal */}
           <div className="flex justify-center w-full overflow-x-auto">
-            <div
-              className="grid w-full max-w-3xl min-w-[420px] mx-auto overflow-x-auto text-sm border border-primary-blue/15 bg-white shadow-[0_1px_3px_rgba(30,58,138,0.08)] rounded-xl overflow-hidden"
-              style={{ gridTemplateColumns: '18% 41% 41%', gridTemplateRows: 'auto repeat(5, auto)' }}
-            >
-              {/* Row 0: headers */}
-              <div className="py-3.5 pl-4 pr-3 border-b-2 border-primary-blue/30 border-r border-primary-blue/15 bg-primary-blue/5 rounded-tl-xl" />
-              <div className="py-3.5 px-4 font-semibold text-primary-blue border-b-2 border-primary-blue/30 border-r border-gray-200/80 bg-gradient-to-r from-primary-blue/12 via-primary-blue/8 to-primary-blue/12">
-                <span className="flex items-center gap-2"><span>📒</span> Ledger</span>
-              </div>
-              <div className="py-3.5 px-4 font-semibold text-primary-blue border-b-2 border-primary-blue/30 bg-gradient-to-r from-primary-blue/8 via-primary-blue/12 to-primary-blue/8 rounded-tr-xl">
-                <span className="flex items-center gap-2"><span>🏦</span> Bank</span>
-              </div>
-              {/* Row 1: Date */}
-              <div className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-b border-gray-200/80 border-r border-primary-blue/15 bg-primary-blue/5">
-                Date
-              </div>
-              <div className="py-2.5 px-4 font-semibold text-gray-800 border-b border-gray-200/80 border-r border-gray-200/80 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={formatDate(match.ledger_txn.date)}>
-                {formatDate(match.ledger_txn.date)}
-              </div>
-              <div className="py-2.5 px-4 font-semibold text-gray-800 border-b border-gray-200/80 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={match.bank_txn ? formatDate(match.bank_txn.date) : '—'}>
-                {match.bank_txn ? formatDate(match.bank_txn.date) : '—'}
-              </div>
-              {/* Row 2: Amount */}
-              <div className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-b border-gray-200/80 border-r border-primary-blue/15 bg-primary-blue/5">
-                Amount
-              </div>
-              <div className="py-2.5 px-4 font-semibold text-gray-800 border-b border-gray-200/80 border-r border-gray-200/80 bg-gray-50/40 whitespace-nowrap overflow-hidden text-ellipsis" title={formatCurrency(match.ledger_txn.amount)}>
-                {formatCurrency(match.ledger_txn.amount)}
-              </div>
-              <div className="py-2.5 px-4 font-semibold text-gray-800 border-b border-gray-200/80 bg-gray-50/40 whitespace-nowrap overflow-hidden text-ellipsis" title={match.bank_txn ? formatCurrency(match.bank_txn.amount) : '—'}>
-                {match.bank_txn ? formatCurrency(match.bank_txn.amount) : '—'}
-              </div>
-              {/* Row 3: Vendor */}
-              <div className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-b border-gray-200/80 border-r border-primary-blue/15 bg-primary-blue/5">
-                Vendor
-              </div>
-              <div className="py-2.5 px-4 font-semibold text-gray-800 border-b border-gray-200/80 border-r border-gray-200/80 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={match.ledger_txn.vendor}>
-                {match.ledger_txn.vendor}
-              </div>
-              <div className="py-2.5 px-4 font-semibold text-gray-800 border-b border-gray-200/80 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={match.bank_txn ? match.bank_txn.vendor : '—'}>
-                {match.bank_txn ? match.bank_txn.vendor : '—'}
-              </div>
-              {/* Row 4: Description */}
-              <div className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-b border-gray-200/80 border-r border-primary-blue/15 bg-primary-blue/5">
-                Description
-              </div>
-              <div className="py-2.5 px-4 font-medium text-gray-800 border-b border-gray-200/80 border-r border-gray-200/80 bg-gray-50/40 break-words" style={{ overflowWrap: 'break-word' }} title={match.ledger_txn.description}>
-                {match.ledger_txn.description}
-              </div>
-              <div className="py-2.5 px-4 font-medium text-gray-800 border-b border-gray-200/80 bg-gray-50/40 break-words" style={{ overflowWrap: 'break-word' }} title={match.bank_txn ? match.bank_txn.description : undefined}>
-                {match.bank_txn ? match.bank_txn.description : '—'}
-              </div>
-              {/* Row 5: Reference (last row, no border-b) */}
-              <div className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-r border-primary-blue/15 bg-primary-blue/5 rounded-bl-xl">
-                Reference
-              </div>
-              <div className="py-2.5 px-4 font-semibold text-gray-800 border-r border-gray-200/80 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={match.ledger_txn.reference || '—'}>
-                {match.ledger_txn.reference || '—'}
-              </div>
-              <div className="py-2.5 px-4 font-semibold text-gray-800 bg-white whitespace-nowrap overflow-hidden text-ellipsis rounded-br-xl" title={match.bank_txn?.reference ?? '—'}>
-                {match.bank_txn?.reference ?? '—'}
-              </div>
+            <div className="w-max max-w-full mx-auto">
+              <table
+                ref={tableRef}
+                className="text-sm border border-primary-blue/15 bg-white shadow-[0_1px_3px_rgba(30,58,138,0.08)] rounded-xl overflow-hidden border-collapse"
+                style={{ tableLayout: 'auto', width: 'max-content', minWidth: '420px' }}
+              >
+                <colgroup>
+                  <col style={{ width: 'auto' }} />
+                  <col style={{ width: ledgerBankWidth ? `${ledgerBankWidth}px` : 'auto' }} />
+                  <col style={{ width: ledgerBankWidth ? `${ledgerBankWidth}px` : 'auto' }} />
+                </colgroup>
+                <thead>
+                  <tr className="border-b-2 border-primary-blue/30">
+                    <th className="py-3.5 pl-4 pr-3 border-r border-primary-blue/15 bg-primary-blue/5 rounded-tl-xl" />
+                    <th className="py-3.5 px-4 font-semibold text-primary-blue border-r border-gray-200/80 bg-gradient-to-r from-primary-blue/12 via-primary-blue/8 to-primary-blue/12">
+                      <span className="flex items-center gap-2"><span>📒</span> Ledger</span>
+                    </th>
+                    <th className="py-3.5 px-4 font-semibold text-primary-blue bg-gradient-to-r from-primary-blue/8 via-primary-blue/12 to-primary-blue/8 rounded-tr-xl">
+                      <span className="flex items-center gap-2"><span>🏦</span> Bank</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-gray-200/80">
+                    <td className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-r border-primary-blue/15 bg-primary-blue/5">
+                      Date
+                    </td>
+                    <td className="py-2.5 px-4 font-semibold text-gray-800 border-r border-gray-200/80 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={formatDate(match.ledger_txn.date)}>
+                      {formatDate(match.ledger_txn.date)}
+                    </td>
+                    <td className="py-2.5 px-4 font-semibold text-gray-800 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={match.bank_txn ? formatDate(match.bank_txn.date) : '—'}>
+                      {match.bank_txn ? formatDate(match.bank_txn.date) : '—'}
+                    </td>
+                  </tr>
+                  <tr className="border-b border-gray-200/80">
+                    <td className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-r border-primary-blue/15 bg-primary-blue/5">
+                      Amount
+                    </td>
+                    <td className="py-2.5 px-4 font-semibold text-gray-800 border-r border-gray-200/80 bg-gray-50/40 whitespace-nowrap overflow-hidden text-ellipsis" title={formatCurrency(match.ledger_txn.amount)}>
+                      {formatCurrency(match.ledger_txn.amount)}
+                    </td>
+                    <td className="py-2.5 px-4 font-semibold text-gray-800 bg-gray-50/40 whitespace-nowrap overflow-hidden text-ellipsis" title={match.bank_txn ? formatCurrency(match.bank_txn.amount) : '—'}>
+                      {match.bank_txn ? formatCurrency(match.bank_txn.amount) : '—'}
+                    </td>
+                  </tr>
+                  <tr className="border-b border-gray-200/80">
+                    <td className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-r border-primary-blue/15 bg-primary-blue/5">
+                      Vendor
+                    </td>
+                    <td className="py-2.5 px-4 font-semibold text-gray-800 border-r border-gray-200/80 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={match.ledger_txn.vendor}>
+                      {match.ledger_txn.vendor}
+                    </td>
+                    <td className="py-2.5 px-4 font-semibold text-gray-800 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={match.bank_txn ? match.bank_txn.vendor : '—'}>
+                      {match.bank_txn ? match.bank_txn.vendor : '—'}
+                    </td>
+                  </tr>
+                  <tr className="border-b border-gray-200/80">
+                    <td className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-r border-primary-blue/15 bg-primary-blue/5">
+                      Description
+                    </td>
+                    <td className="py-2.5 px-4 font-medium text-gray-800 border-r border-gray-200/80 bg-gray-50/40 break-words" style={{ overflowWrap: 'break-word' }} title={match.ledger_txn.description}>
+                      {match.ledger_txn.description}
+                    </td>
+                    <td className="py-2.5 px-4 font-medium text-gray-800 bg-gray-50/40 break-words" style={{ overflowWrap: 'break-word' }} title={match.bank_txn ? match.bank_txn.description : undefined}>
+                      {match.bank_txn ? match.bank_txn.description : '—'}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-r border-primary-blue/15 bg-primary-blue/5 rounded-bl-xl">
+                      Reference
+                    </td>
+                    <td className="py-2.5 px-4 font-semibold text-gray-800 border-r border-gray-200/80 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={match.ledger_txn.reference || '—'}>
+                      {match.ledger_txn.reference || '—'}
+                    </td>
+                    <td className="py-2.5 px-4 font-semibold text-gray-800 bg-white whitespace-nowrap overflow-hidden text-ellipsis rounded-br-xl" title={match.bank_txn?.reference ?? '—'}>
+                      {match.bank_txn?.reference ?? '—'}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
