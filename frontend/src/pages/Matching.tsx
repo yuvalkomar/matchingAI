@@ -285,9 +285,34 @@ const Matching = () => {
     }
   };
 
-  const handleMatchAction = async (action: 'match' | 'reject' | 'exclude_ledger' | 'exclude_bank' | 'exclude_both' | 'skip') => {
+  const handleMatchAction = async (action: 'match' | 'reject' | 'exclude_ledger' | 'exclude_bank' | 'exclude_both' | 'skip' | 'revert') => {
     setIsSubmitting(true);
     try {
+      // Handle actions for approved matches (readOnly mode)
+      if (reviewReadOnly && currentMatch) {
+        if (action === 'reject') {
+          // Reject an approved match
+          if (currentMatch.bank_txn) {
+            await rejectApprovedMatch(currentMatch.ledger_txn.id, currentMatch.bank_txn.id);
+          }
+          setShowReviewModal(false);
+          setReviewReadOnly(false);
+          await loadAllData();
+          return;
+        } else if (action === 'revert') {
+          // Revert approved match back to pool
+          // For now, we'll reject it and it can be restored from rejected matches
+          // TODO: Implement proper revert endpoint in backend
+          if (currentMatch.bank_txn) {
+            await rejectApprovedMatch(currentMatch.ledger_txn.id, currentMatch.bank_txn.id);
+          }
+          setShowReviewModal(false);
+          setReviewReadOnly(false);
+          await loadAllData();
+          return;
+        }
+      }
+      
       await submitMatchAction(action, matchIndex);
 
       // Get next match
