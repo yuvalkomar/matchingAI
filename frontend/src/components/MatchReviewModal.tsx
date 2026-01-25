@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { X, Check, XCircle, Ban, SkipForward, ChevronDown, Info } from 'lucide-react';
+import { X, Check, XCircle, Ban, SkipForward, ChevronDown, Info, MessageCircle } from 'lucide-react';
 import { MatchResult } from '../types';
 
 interface MatchReviewModalProps {
@@ -37,11 +37,22 @@ const MatchReviewModal = ({
     }).format(amount);
   };
 
-  const confidenceColor = match.confidence >= 0.8 
-    ? 'text-green-600 bg-green-50' 
-    : match.confidence >= 0.5 
-      ? 'text-yellow-600 bg-yellow-50' 
-      : 'text-red-600 bg-red-50';
+  const getConfidenceLabel = (c: number) =>
+    c >= 0.8 ? 'High' : c >= 0.5 ? 'Medium' : 'Low';
+  const getConfidencePillClass = (c: number) =>
+    c >= 0.8 ? 'bg-green-600 text-white' : c >= 0.5 ? 'bg-yellow-500 text-white' : 'bg-red-600 text-white';
+  const getScoreColor = (v: number) =>
+    v >= 0.7 ? 'text-green-600' : v >= 0.4 ? 'text-yellow-600' : 'text-red-600';
+  const hasComponentScores = Object.keys(match.component_scores || {}).length > 0;
+
+  const componentScoreLabel: Record<string, string> = {
+    txn_type: 'Transaction type (in/out)',
+    amount: 'Amount',
+    date: 'Date',
+    vendor: 'Vendor',
+    reference: 'Reference',
+  };
+  const getScoreLabel = (key: string) => componentScoreLabel[key] ?? key.replace(/_/g, ' ');
 
   // Handle ESC key press
   useEffect(() => {
@@ -86,117 +97,131 @@ const MatchReviewModal = ({
               </p>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-blue-100/50 rounded-full transition-colors"
-          >
-            <X className="w-5 h-5 text-text-secondary" />
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Confidence pill with tooltip (opens below so it stays on screen) */}
+            <div
+              className="relative group cursor-help"
+              aria-label="Confidence score, hover for breakdown"
+              tabIndex={0}
+            >
+              <span
+                className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold ${getConfidencePillClass(match.confidence)}`}
+              >
+                {(match.confidence * 100).toFixed(0)}% · {getConfidenceLabel(match.confidence)} confidence
+              </span>
+              <span
+                role="tooltip"
+                className="absolute right-0 top-full mt-1.5 w-52 py-0 rounded-xl border border-primary-blue/20 bg-white shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-opacity z-40 pointer-events-none overflow-hidden"
+              >
+                <div className="px-3 py-2.5 bg-gradient-to-r from-primary-blue/8 to-primary-blue/5 border-b border-primary-blue/15">
+                  <span className="font-semibold text-sm text-primary-blue">Score breakdown</span>
+                </div>
+                <div className="px-3 py-2.5">
+                  {hasComponentScores ? (
+                    <div className="space-y-2">
+                      {Object.entries(match.component_scores!).map(([key, value]) => (
+                        <div key={key} className="flex justify-between items-center gap-4">
+                          <span className="text-xs text-text-secondary">{getScoreLabel(key)}</span>
+                          <span className={`text-xs font-semibold shrink-0 ${getScoreColor(value)}`}>
+                            {(value * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-text-secondary">No breakdown available.</p>
+                  )}
+                </div>
+              </span>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-blue-100/50 rounded-full transition-colors"
+            >
+              <X className="w-5 h-5 text-text-secondary" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-6">
-          {/* AI Explanation */}
-          <div className="mb-6 p-4 bg-blue-50/50 border border-blue-200/50 rounded-xl">
+        <div className="flex-1 overflow-y-auto overflow-x-auto p-6">
+          {/* Match details: single grid (3×6) so row borders align across Field | Ledger | Bank */}
+          <div className="flex justify-center w-full overflow-x-auto">
+            <div
+              className="grid w-full max-w-3xl min-w-[420px] mx-auto overflow-x-auto text-sm border border-primary-blue/15 bg-white shadow-[0_1px_3px_rgba(30,58,138,0.08)] rounded-xl overflow-hidden"
+              style={{ gridTemplateColumns: '18% 41% 41%', gridTemplateRows: 'auto repeat(5, auto)' }}
+            >
+              {/* Row 0: headers */}
+              <div className="py-3.5 pl-4 pr-3 border-b-2 border-primary-blue/30 border-r border-primary-blue/15 bg-primary-blue/5 rounded-tl-xl" />
+              <div className="py-3.5 px-4 font-semibold text-primary-blue border-b-2 border-primary-blue/30 border-r border-gray-200/80 bg-gradient-to-r from-primary-blue/12 via-primary-blue/8 to-primary-blue/12">
+                <span className="flex items-center gap-2"><span>📒</span> Ledger</span>
+              </div>
+              <div className="py-3.5 px-4 font-semibold text-primary-blue border-b-2 border-primary-blue/30 bg-gradient-to-r from-primary-blue/8 via-primary-blue/12 to-primary-blue/8 rounded-tr-xl">
+                <span className="flex items-center gap-2"><span>🏦</span> Bank</span>
+              </div>
+              {/* Row 1: Date */}
+              <div className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-b border-gray-200/80 border-r border-primary-blue/15 bg-primary-blue/5">
+                Date
+              </div>
+              <div className="py-2.5 px-4 font-semibold text-gray-800 border-b border-gray-200/80 border-r border-gray-200/80 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={formatDate(match.ledger_txn.date)}>
+                {formatDate(match.ledger_txn.date)}
+              </div>
+              <div className="py-2.5 px-4 font-semibold text-gray-800 border-b border-gray-200/80 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={match.bank_txn ? formatDate(match.bank_txn.date) : '—'}>
+                {match.bank_txn ? formatDate(match.bank_txn.date) : '—'}
+              </div>
+              {/* Row 2: Amount */}
+              <div className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-b border-gray-200/80 border-r border-primary-blue/15 bg-primary-blue/5">
+                Amount
+              </div>
+              <div className="py-2.5 px-4 font-semibold text-gray-800 border-b border-gray-200/80 border-r border-gray-200/80 bg-gray-50/40 whitespace-nowrap overflow-hidden text-ellipsis" title={formatCurrency(match.ledger_txn.amount)}>
+                {formatCurrency(match.ledger_txn.amount)}
+              </div>
+              <div className="py-2.5 px-4 font-semibold text-gray-800 border-b border-gray-200/80 bg-gray-50/40 whitespace-nowrap overflow-hidden text-ellipsis" title={match.bank_txn ? formatCurrency(match.bank_txn.amount) : '—'}>
+                {match.bank_txn ? formatCurrency(match.bank_txn.amount) : '—'}
+              </div>
+              {/* Row 3: Vendor */}
+              <div className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-b border-gray-200/80 border-r border-primary-blue/15 bg-primary-blue/5">
+                Vendor
+              </div>
+              <div className="py-2.5 px-4 font-semibold text-gray-800 border-b border-gray-200/80 border-r border-gray-200/80 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={match.ledger_txn.vendor}>
+                {match.ledger_txn.vendor}
+              </div>
+              <div className="py-2.5 px-4 font-semibold text-gray-800 border-b border-gray-200/80 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={match.bank_txn ? match.bank_txn.vendor : '—'}>
+                {match.bank_txn ? match.bank_txn.vendor : '—'}
+              </div>
+              {/* Row 4: Description */}
+              <div className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-b border-gray-200/80 border-r border-primary-blue/15 bg-primary-blue/5">
+                Description
+              </div>
+              <div className="py-2.5 px-4 font-medium text-gray-800 border-b border-gray-200/80 border-r border-gray-200/80 bg-gray-50/40 break-words" style={{ overflowWrap: 'break-word' }} title={match.ledger_txn.description}>
+                {match.ledger_txn.description}
+              </div>
+              <div className="py-2.5 px-4 font-medium text-gray-800 border-b border-gray-200/80 bg-gray-50/40 break-words" style={{ overflowWrap: 'break-word' }} title={match.bank_txn ? match.bank_txn.description : undefined}>
+                {match.bank_txn ? match.bank_txn.description : '—'}
+              </div>
+              {/* Row 5: Reference (last row, no border-b) */}
+              <div className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-r border-primary-blue/15 bg-primary-blue/5 rounded-bl-xl">
+                Reference
+              </div>
+              <div className="py-2.5 px-4 font-semibold text-gray-800 border-r border-gray-200/80 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={match.ledger_txn.reference || '—'}>
+                {match.ledger_txn.reference || '—'}
+              </div>
+              <div className="py-2.5 px-4 font-semibold text-gray-800 bg-white whitespace-nowrap overflow-hidden text-ellipsis rounded-br-xl" title={match.bank_txn?.reference ?? '—'}>
+                {match.bank_txn?.reference ?? '—'}
+              </div>
+            </div>
+          </div>
+
+          {/* Explanation (below match details) */}
+          <div className="mt-6 p-4 bg-blue-50/50 border border-blue-200/50 rounded-xl">
             <div className="flex items-start gap-3">
-              <span className="text-2xl">🤖</span>
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <span className="font-semibold text-text-primary">AI Suggestion</span>
-                  <span className={`px-2 py-1 rounded text-sm font-medium ${confidenceColor}`}>
-                    {(match.confidence * 100).toFixed(0)}% confidence
-                  </span>
-                </div>
+              <MessageCircle className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <h4 className="font-semibold text-text-primary mb-1">Explanation</h4>
                 <p className="text-text-secondary text-sm">{match.llm_explanation || 'No explanation available'}</p>
               </div>
             </div>
           </div>
-
-          {/* Transaction Comparison */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Ledger Transaction */}
-            <div className="border-2 border-blue-300/50 rounded-xl p-4 bg-blue-50/30">
-              <h3 className="font-semibold text-text-primary mb-3 flex items-center gap-2 text-sm">
-                <span>📒</span> Ledger Entry
-              </h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-text-secondary">Date:</span>
-                  <span className="font-medium">{formatDate(match.ledger_txn.date)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-text-secondary">Amount:</span>
-                  <span className="font-medium">{formatCurrency(match.ledger_txn.amount)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-text-secondary">Vendor:</span>
-                  <span className="font-medium">{match.ledger_txn.vendor}</span>
-                </div>
-                <div className="flex justify-between items-start">
-                  <span className="text-text-secondary">Description:</span>
-                  <span className="font-medium text-right max-w-[60%]">{match.ledger_txn.description}</span>
-                </div>
-                {match.ledger_txn.reference && (
-                  <div className="flex justify-between">
-                    <span className="text-text-secondary">Reference:</span>
-                    <span className="font-medium">{match.ledger_txn.reference}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Bank Transaction */}
-            <div className="border-2 border-blue-300/50 rounded-xl p-4 bg-blue-50/30">
-              <h3 className="font-semibold text-text-primary mb-3 flex items-center gap-2 text-sm">
-                <span>🏦</span> Bank Transaction
-              </h3>
-              {match.bank_txn ? (
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-text-secondary">Date:</span>
-                    <span className="font-medium">{formatDate(match.bank_txn.date)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-text-secondary">Amount:</span>
-                    <span className="font-medium">{formatCurrency(match.bank_txn.amount)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-text-secondary">Vendor:</span>
-                    <span className="font-medium">{match.bank_txn.vendor}</span>
-                  </div>
-                  <div className="flex justify-between items-start">
-                    <span className="text-text-secondary">Description:</span>
-                    <span className="font-medium text-right max-w-[60%]">{match.bank_txn.description}</span>
-                  </div>
-                  {match.bank_txn.reference && (
-                    <div className="flex justify-between">
-                      <span className="text-text-secondary">Reference:</span>
-                      <span className="font-medium">{match.bank_txn.reference}</span>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className="text-text-secondary text-sm">No bank transaction matched</p>
-              )}
-            </div>
-          </div>
-
-          {/* Component Scores */}
-          {Object.keys(match.component_scores).length > 0 && (
-            <div className="mt-4 p-3 bg-blue-50/30 rounded-xl border border-blue-200/50">
-              <h4 className="text-sm font-semibold text-text-primary mb-2">Match Scores</h4>
-              <div className="flex flex-wrap gap-3">
-                {Object.entries(match.component_scores).map(([key, value]) => (
-                  <div key={key} className="text-xs">
-                    <span className="text-text-secondary capitalize">{key}:</span>
-                    <span className={`ml-1 font-semibold ${value >= 0.7 ? 'text-green-600' : value >= 0.4 ? 'text-yellow-600' : 'text-red-600'}`}>
-                      {(value * 100).toFixed(0)}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Actions Footer */}
