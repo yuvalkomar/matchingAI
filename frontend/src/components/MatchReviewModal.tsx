@@ -150,13 +150,13 @@ const MatchReviewModal = ({
       onClick={handleBackdropClick}
     >
       <div 
-        className="rounded-2xl border border-blue-300/50 bg-white/95 backdrop-blur-sm shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col"
+        className={`rounded-2xl border ${readOnly ? 'border-green-300/50' : 'border-blue-300/50'} bg-white/95 backdrop-blur-sm shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-blue-300/50 bg-gradient-to-r from-primary-blue/10 to-blue-100/50">
+        <div className={`flex items-center justify-between px-6 py-4 border-b ${readOnly ? 'border-green-300/50 bg-gradient-to-r from-green-500/20 to-green-300/70' : 'border-blue-300/50 bg-gradient-to-r from-primary-blue/10 to-blue-100/50'}`}>
           <div>
-            <h2 className="text-xl font-bold bg-gradient-to-r from-primary-blue to-blue-600 bg-clip-text text-transparent">
+            <h2 className={`text-xl font-bold bg-gradient-to-r ${readOnly ? 'from-green-600 to-green-700' : 'from-primary-blue to-blue-600'} bg-clip-text text-transparent`}>
               {readOnly ? 'Approved Match' : 'Review Match'}
             </h2>
             {!readOnly && (
@@ -179,10 +179,10 @@ const MatchReviewModal = ({
               </span>
               <span
                 role="tooltip"
-                className="absolute right-0 top-full mt-1.5 w-52 py-0 rounded-xl border border-primary-blue/20 bg-white shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-opacity z-40 pointer-events-none overflow-hidden"
+                className={`absolute right-0 top-full mt-1.5 w-52 py-0 rounded-xl border ${readOnly ? 'border-green-500/20' : 'border-primary-blue/20'} bg-white shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible group-focus-within:opacity-100 group-focus-within:visible transition-opacity z-40 pointer-events-none overflow-hidden`}
               >
-                <div className="px-3 py-2.5 bg-gradient-to-r from-primary-blue/8 to-primary-blue/5 border-b border-primary-blue/15">
-                  <span className="font-semibold text-sm text-primary-blue">Score breakdown</span>
+                <div className={`px-3 py-2.5 bg-gradient-to-r ${readOnly ? 'from-green-400/25 to-green-400/15 border-b border-green-500/25' : 'from-primary-blue/8 to-primary-blue/5 border-b border-primary-blue/15'}`}>
+                  <span className={`font-semibold text-sm ${readOnly ? 'text-green-600' : 'text-primary-blue'}`}>Score breakdown</span>
                 </div>
                 <div className="px-3 py-2.5">
                   {hasComponentScores ? (
@@ -204,7 +204,7 @@ const MatchReviewModal = ({
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-blue-100/50 rounded-full transition-colors"
+              className={`p-2 ${readOnly ? 'hover:bg-green-300/70' : 'hover:bg-blue-100/50'} rounded-full transition-colors`}
             >
               <X className="w-5 h-5 text-text-secondary" />
             </button>
@@ -218,7 +218,7 @@ const MatchReviewModal = ({
             <div className="w-max max-w-full mx-auto">
               <table
                 ref={tableRef}
-                className="text-sm border border-primary-blue/15 bg-white shadow-[0_1px_3px_rgba(30,58,138,0.08)] rounded-xl overflow-hidden border-collapse"
+                className={`text-sm border ${readOnly ? 'border-green-400/30' : 'border-primary-blue/15'} bg-white ${readOnly ? 'shadow-[0_1px_3px_rgba(34,197,94,0.15)]' : 'shadow-[0_1px_3px_rgba(30,58,138,0.08)]'} rounded-xl overflow-hidden border-collapse`}
                 style={{ tableLayout: 'auto', width: 'max-content', minWidth: '420px' }}
               >
                 <colgroup>
@@ -227,19 +227,19 @@ const MatchReviewModal = ({
                   <col style={{ width: ledgerBankWidth ? `${ledgerBankWidth}px` : 'auto' }} />
                 </colgroup>
                 <thead>
-                  <tr className="border-b-2 border-primary-blue/30">
-                    <th className="py-3.5 pl-4 pr-3 border-r border-primary-blue/15 bg-primary-blue/5 rounded-tl-xl" />
-                    <th className="py-3.5 px-4 font-semibold text-primary-blue border-r border-gray-200/80 bg-gradient-to-r from-primary-blue/12 via-primary-blue/8 to-primary-blue/12">
+                  <tr className={`border-b-2 ${readOnly ? 'border-green-400/40' : 'border-primary-blue/30'}`}>
+                    <th className={`py-3.5 pl-4 pr-3 border-r ${readOnly ? 'border-green-400/30 bg-green-400/15' : 'border-primary-blue/15 bg-primary-blue/5'} rounded-tl-xl`} />
+                    <th className={`py-3.5 px-4 font-semibold ${readOnly ? 'text-green-600' : 'text-primary-blue'} border-r ${readOnly ? 'border-green-300/40' : 'border-gray-200/80'} ${readOnly ? 'bg-gradient-to-r from-green-300/35 via-green-300/25 to-green-300/35' : 'bg-gradient-to-r from-primary-blue/12 via-primary-blue/8 to-primary-blue/12'}`}>
                       <span className="flex items-center gap-2"><span>📒</span> Ledger</span>
                     </th>
-                    <th className="py-3.5 px-4 font-semibold text-primary-blue bg-gradient-to-r from-primary-blue/8 via-primary-blue/12 to-primary-blue/8 rounded-tr-xl">
+                    <th className={`py-3.5 px-4 font-semibold ${readOnly ? 'text-green-600' : 'text-primary-blue'} ${readOnly ? 'bg-gradient-to-r from-green-300/25 via-green-300/35 to-green-300/25' : 'bg-gradient-to-r from-primary-blue/8 via-primary-blue/12 to-primary-blue/8'} rounded-tr-xl`}>
                       <span className="flex items-center gap-2"><span>🏦</span> Bank</span>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr className="border-b border-gray-200/80">
-                    <td className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-r border-primary-blue/15 bg-primary-blue/5">
+                    <td className={`py-2.5 pl-4 pr-3 ${readOnly ? 'text-green-600/90' : 'text-primary-blue/90'} font-medium border-r ${readOnly ? 'border-green-400/30 bg-green-400/15' : 'border-primary-blue/15 bg-primary-blue/5'}`}>
                       Date
                     </td>
                     <td className="py-2.5 px-4 font-semibold text-gray-800 border-r border-gray-200/80 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={formatDate(match.ledger_txn.date)}>
@@ -250,7 +250,7 @@ const MatchReviewModal = ({
                     </td>
                   </tr>
                   <tr className="border-b border-gray-200/80">
-                    <td className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-r border-primary-blue/15 bg-primary-blue/5">
+                    <td className={`py-2.5 pl-4 pr-3 ${readOnly ? 'text-green-600/90' : 'text-primary-blue/90'} font-medium border-r ${readOnly ? 'border-green-400/30 bg-green-400/15' : 'border-primary-blue/15 bg-primary-blue/5'}`}>
                       Amount
                     </td>
                     <td className="py-2.5 px-4 font-semibold text-gray-800 border-r border-gray-200/80 bg-gray-50/40 whitespace-nowrap overflow-hidden text-ellipsis" title={formatCurrency(match.ledger_txn.amount)}>
@@ -261,7 +261,7 @@ const MatchReviewModal = ({
                     </td>
                   </tr>
                   <tr className="border-b border-gray-200/80">
-                    <td className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-r border-primary-blue/15 bg-primary-blue/5">
+                    <td className={`py-2.5 pl-4 pr-3 ${readOnly ? 'text-green-600/90' : 'text-primary-blue/90'} font-medium border-r ${readOnly ? 'border-green-400/30 bg-green-400/15' : 'border-primary-blue/15 bg-primary-blue/5'}`}>
                       Vendor
                     </td>
                     <td className="py-2.5 px-4 font-semibold text-gray-800 border-r border-gray-200/80 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={match.ledger_txn.vendor}>
@@ -272,7 +272,7 @@ const MatchReviewModal = ({
                     </td>
                   </tr>
                   <tr className="border-b border-gray-200/80">
-                    <td className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-r border-primary-blue/15 bg-primary-blue/5">
+                    <td className={`py-2.5 pl-4 pr-3 ${readOnly ? 'text-green-600/90' : 'text-primary-blue/90'} font-medium border-r ${readOnly ? 'border-green-400/30 bg-green-400/15' : 'border-primary-blue/15 bg-primary-blue/5'}`}>
                       Description
                     </td>
                     <td className="py-2.5 px-4 font-medium text-gray-800 border-r border-gray-200/80 bg-gray-50/40 break-words" style={{ overflowWrap: 'break-word' }} title={match.ledger_txn.description}>
@@ -283,7 +283,7 @@ const MatchReviewModal = ({
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-2.5 pl-4 pr-3 text-primary-blue/90 font-medium border-r border-primary-blue/15 bg-primary-blue/5 rounded-bl-xl">
+                    <td className={`py-2.5 pl-4 pr-3 ${readOnly ? 'text-green-600/90' : 'text-primary-blue/90'} font-medium border-r ${readOnly ? 'border-green-400/30 bg-green-400/15' : 'border-primary-blue/15 bg-primary-blue/5'} rounded-bl-xl`}>
                       Reference
                     </td>
                     <td className="py-2.5 px-4 font-semibold text-gray-800 border-r border-gray-200/80 bg-white whitespace-nowrap overflow-hidden text-ellipsis" title={match.ledger_txn.reference || '—'}>
@@ -299,9 +299,9 @@ const MatchReviewModal = ({
           </div>
 
           {/* Explanation (below match details) */}
-          <div className="mt-6 p-4 bg-blue-50/50 border border-blue-200/50 rounded-xl">
+          <div className={`mt-6 p-4 ${readOnly ? 'bg-green-200/70 border border-green-300/50' : 'bg-blue-50/50 border border-blue-200/50'} rounded-xl`}>
             <div className="flex items-start gap-3">
-              <MessageCircle className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+              <MessageCircle className={`w-5 h-5 ${readOnly ? 'text-green-600' : 'text-blue-600'} mt-0.5 shrink-0`} />
               <div className="flex-1 min-w-0">
                 <h4 className="font-semibold text-text-primary mb-1">Explanation</h4>
                 <p className="text-text-secondary text-sm">{match.llm_explanation || 'No explanation available'}</p>
@@ -312,14 +312,14 @@ const MatchReviewModal = ({
 
         {/* Actions Footer */}
         {readOnly && (
-          <div className="px-6 py-4 border-t border-blue-300/50 bg-gradient-to-r from-primary-blue/10 to-blue-100/50 flex flex-wrap gap-3 justify-center relative overflow-visible">
+          <div className="px-6 py-4 border-t border-green-300/50 bg-gradient-to-r from-green-500/20 to-green-300/70 flex flex-wrap gap-3 justify-center relative overflow-visible">
             <button
               onClick={() => onAction('revert')}
               disabled={isSubmitting}
               className="flex items-center gap-2 px-5 py-2.5 border border-blue-300 text-primary-blue rounded-xl hover:bg-blue-50 disabled:opacity-50 transition-colors font-medium text-sm"
             >
               <RotateCcw className="w-4 h-4" />
-              Revert to Pool
+              Unapprove Match
             </button>
             <button
               onClick={() => onAction('reject')}
