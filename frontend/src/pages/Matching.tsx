@@ -318,39 +318,10 @@ const Matching = () => {
       // Get next match
       const response = await getNextMatch();
       if ('done' in response && response.done) {
-        // If matching is still in progress, wait for more matches
-        if (matchingProgress?.in_progress) {
-          // Keep modal open, show waiting state
-          setCurrentMatch(null);
-          // Poll for new matches
-          let attempts = 0;
-          const waitForMore = async () => {
-            attempts++;
-            if (attempts > 10) {
-              // Give up after 10 seconds
-              setShowReviewModal(false);
-              return;
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const newResponse = await getNextMatch();
-            if ('match' in newResponse && newResponse.match) {
-              setCurrentMatch(newResponse.match);
-              setMatchIndex(newResponse.match_index);
-              setTotalPending(newResponse.total);
-            } else if (matchingProgress?.in_progress) {
-              waitForMore();
-            } else {
-              setShowReviewModal(false);
-              setCurrentMatch(null);
-              await loadAllData();
-            }
-          };
-          waitForMore();
-        } else {
-          setShowReviewModal(false);
-          setCurrentMatch(null);
-          await loadAllData();
-        }
+        // Close modal when all matches are reviewed
+        setShowReviewModal(false);
+        setCurrentMatch(null);
+        await loadAllData();
       } else if ('match' in response) {
         setCurrentMatch(response.match);
         setMatchIndex(response.match_index);
@@ -1046,30 +1017,6 @@ const Matching = () => {
         />
       )}
 
-      {/* Waiting for more matches modal */}
-      {showReviewModal && !currentMatch && isMatchingInProgress && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="rounded-2xl border border-blue-300/50 bg-white/95 backdrop-blur-sm shadow-2xl max-w-md w-full p-8 text-center">
-            <Loader2 className="w-12 h-12 animate-spin text-primary-blue mx-auto mb-4" />
-            <h2 className="text-xl font-bold bg-gradient-to-r from-primary-blue to-blue-600 bg-clip-text text-transparent mb-2">Waiting for more matches</h2>
-            <p className="text-text-secondary mb-4">
-              Reviewed all current matches. AI is finding more.
-            </p>
-            <p className="text-sm text-text-secondary mb-6">
-              {matchingProgress?.progress || 0} of {matchingProgress?.total || 0} processed
-            </p>
-            <button
-              onClick={() => {
-                setShowReviewModal(false);
-                loadAllData();
-              }}
-              className="px-6 py-2.5 border border-blue-300 rounded-xl hover:bg-blue-50/50 transition-colors font-medium"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Rejected Matches Modal */}
       {showRejectedModal && (
