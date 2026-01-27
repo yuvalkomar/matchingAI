@@ -22,6 +22,7 @@ import {
 import { Transaction, MatchResult, MatchingConfig } from '../types';
 import MatchReviewModal from '../components/MatchReviewModal';
 import RejectedMatchesModal from '../components/RejectedMatchesModal';
+import ExportPopup, { ExportType } from '../components/ExportPopup';
 import { CountBadge } from '../components/CountBadge';
 import {
   Download,
@@ -100,6 +101,11 @@ const Matching = () => {
   // Export menu state
   const [showExportMenu, setShowExportMenu] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  // Export popup state
+  const [showExportPopup, setShowExportPopup] = useState(false);
+  const [exportedFiles, setExportedFiles] = useState<Set<ExportType>>(new Set());
+  const [currentStateHash, setCurrentStateHash] = useState<string>('');
 
   // Loading states
   const [isRerunning, setIsRerunning] = useState(false);
@@ -183,6 +189,14 @@ const Matching = () => {
     }
   }, []);
 
+  // Compute state hash to detect when matches change
+  const computeStateHash = useCallback((confirmed: ConfirmedMatch[], pending: { index: number; match: MatchResult }[]) => {
+    // Create a hash based on confirmed matches IDs and pending matches IDs
+    const confirmedIds = confirmed.map(m => `${m.ledger_txn.id}-${m.bank_txn.id}`).sort().join(',');
+    const pendingIds = pending.map(({ match }) => `${match.ledger_txn.id}-${match.bank_txn?.id || 'none'}`).sort().join(',');
+    return `${confirmedIds}|${pendingIds}`;
+  }, []);
+
   const loadAllData = useCallback(async () => {
     try {
       const [statsData, ledgerData, bankData, matchesData, pendingData] = await Promise.all([
@@ -199,10 +213,18 @@ const Matching = () => {
       setConfirmedMatches(matchesData.matches);
       setTotalPending(statsData.pending);
       setPendingMatchesList(pendingData.matches);
+
+      // Check if state has changed and reset exported files if so
+      const newStateHash = computeStateHash(matchesData.matches, pendingData.matches);
+      if (currentStateHash && newStateHash !== currentStateHash) {
+        // State changed - reset exported files
+        setExportedFiles(new Set());
+      }
+      setCurrentStateHash(newStateHash);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
-  }, []);
+  }, [computeStateHash, currentStateHash]);
 
   useEffect(() => {
     // Check progress once on mount to determine if we need to poll
@@ -450,7 +472,7 @@ const Matching = () => {
     }
   };
 
-  const handleExport = async (type: 'matches' | 'ledger' | 'bank' | 'audit') => {
+  const handleExport = async (type: ExportType) => {
     try {
       let blob: Blob;
       let filename: string;
@@ -480,9 +502,25 @@ const Matching = () => {
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
+
+      // Mark as exported and show popup
+      setExportedFiles(prev => new Set(prev).add(type));
+      setShowExportPopup(true);
+      setShowExportMenu(false);
     } catch (error: any) {
       alert(`Export failed: ${error.response?.data?.detail || error.message}`);
     }
+  };
+
+  const handleExportFromPopup = async (type: ExportType) => {
+    await handleExport(type);
+  };
+
+  const handleStartNewSession = () => {
+    // Reset all state
+    setExportedFiles(new Set());
+    setCurrentStateHash('');
+    setShowExportPopup(false);
   };
 
   const formatCurrency = (amount: number) => {
@@ -519,7 +557,7 @@ const Matching = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-200 via-blue-100 to-blue-200">
-      <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 transition-opacity duration-200 ${showReviewModal || showRejectedModal ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 transition-opacity duration-200 ${showReviewModal || showRejectedModal || showExportPopup ? 'opacity-50 pointer-events-none' : ''}`}>
         {/* Title + actions row (Import-style, no box) */}
         <div className="mb-4 flex items-start justify-between flex-wrap gap-4">
           <div>
@@ -583,16 +621,16 @@ const Matching = () => {
               </button>
               {showExportMenu && (
                 <div className="absolute right-0 top-full mt-1 bg-white/95 backdrop-blur-sm border border-blue-300/50 rounded-xl shadow-2xl py-1 z-[100] min-w-[180px]">
-                  <button onClick={() => { handleExport('matches'); setShowExportMenu(false); }} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
+                  <button onClick={() => { handleExport('matches'); }} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
                     Matched Transactions
                   </button>
-                  <button onClick={() => { handleExport('ledger'); setShowExportMenu(false); }} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
+                  <button onClick={() => { handleExport('ledger'); }} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
                     Unmatched Ledger
                   </button>
-                  <button onClick={() => { handleExport('bank'); setShowExportMenu(false); }} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
+                  <button onClick={() => { handleExport('bank'); }} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
                     Unmatched Bank
                   </button>
-                  <button onClick={() => { handleExport('audit'); setShowExportMenu(false); }} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
+                  <button onClick={() => { handleExport('audit'); }} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
                     Audit Trail
                   </button>
                 </div>
@@ -1047,6 +1085,16 @@ const Matching = () => {
         <RejectedMatchesModal
           onClose={() => setShowRejectedModal(false)}
           onRestoreComplete={() => loadAllData()}
+        />
+      )}
+
+      {/* Export Popup */}
+      {showExportPopup && (
+        <ExportPopup
+          exportedFiles={exportedFiles}
+          onExport={handleExportFromPopup}
+          onClose={() => setShowExportPopup(false)}
+          onStartNewSession={handleStartNewSession}
         />
       )}
     </div>

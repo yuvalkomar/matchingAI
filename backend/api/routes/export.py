@@ -54,8 +54,8 @@ async def export_matches():
     
     output = io.StringIO()
     fieldnames = [
-        'Ledger_ID (Internal System ID)', 'Ledger_Date', 'Ledger_Type', 'Ledger_Vendor', 'Ledger_Description', 'Ledger_Amount',
-        'Bank_ID (Internal System ID)', 'Bank_Date', 'Bank_Type', 'Bank_Vendor', 'Bank_Description', 'Bank_Amount',
+        'MatchingAI_internal_Ledger_ID', 'Ledger_Date', 'Ledger_Type', 'Ledger_Vendor', 'Ledger_Description', 'Ledger_Amount',
+        'MatchingAI_internal_Bank_ID', 'Bank_Date', 'Bank_Type', 'Bank_Vendor', 'Bank_Description', 'Bank_Amount',
         'Match_Score', 'Confidence', 'Matched_At'
     ]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -77,13 +77,13 @@ async def export_matches():
             bank_type = "Money In" if bank.get('txn_type') == 'money_in' else "Money Out"
             
             writer.writerow({
-                'Ledger_ID (Internal System ID)': ledger['id'],
+                'MatchingAI_internal_Ledger_ID': ledger['id'],
                 'Ledger_Date': ledger_date,
                 'Ledger_Type': ledger_type,
                 'Ledger_Vendor': ledger['vendor'],
                 'Ledger_Description': ledger['description'],
                 'Ledger_Amount': ledger['amount'],
-                'Bank_ID (Internal System ID)': bank['id'],
+                'MatchingAI_internal_Bank_ID': bank['id'],
                 'Bank_Date': bank_date,
                 'Bank_Type': bank_type,
                 'Bank_Vendor': bank['vendor'],

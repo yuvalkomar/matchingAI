@@ -782,6 +782,7 @@ async def approve_rejected_match(request: Dict[str, Any]):
             'confidence': match_to_approve.get('confidence', 0.0),
             'heuristic_score': match_to_approve.get('heuristic_score', 0.0),
             'llm_explanation': match_to_approve.get('llm_explanation', ''),
+            'component_scores': match_to_approve.get('component_scores', {}),
             'timestamp': timestamp,
         })
         

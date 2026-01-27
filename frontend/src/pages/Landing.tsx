@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom';
-import { FileText, GitMerge, ArrowRight } from 'lucide-react';
+import { FileText, GitMerge, Download, ArrowRight } from 'lucide-react';
 
 const Landing = () => {
   const steps = [
     { icon: FileText, label: 'Import', description: 'Upload your ledger and bank files, map columns' },
-    { icon: GitMerge, label: 'Match & Review', description: 'View matches, review suggestions, export results' },
+    { icon: GitMerge, label: 'Match & Review', description: 'View matches, review suggestions, approve or reject' },
+    { icon: Download, label: 'Export', description: 'Download matched transactions and audit trail' },
   ];
 
   return (
@@ -29,7 +30,7 @@ const Landing = () => {
           </div>
 
           {/* Workflow Steps */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-6 max-w-2xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 mb-6 max-w-4xl mx-auto">
             {steps.map((step, index) => {
               const Icon = step.icon;
               return (
