@@ -18,7 +18,7 @@ def transactions_to_csv(transactions: List[Dict]) -> str:
         return ""
     
     output = io.StringIO()
-    fieldnames = ['ID', 'Date', 'Type', 'Vendor', 'Description', 'Amount', 'Reference', 'Category']
+    fieldnames = ['ID (Internal System ID)', 'Date', 'Type', 'Vendor', 'Description', 'Amount', 'Reference', 'Category']
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
     
@@ -31,7 +31,7 @@ def transactions_to_csv(transactions: List[Dict]) -> str:
         type_display = "Money In" if txn_type == 'money_in' else "Money Out"
         
         writer.writerow({
-            'ID': txn['id'],
+            'ID (Internal System ID)': txn['id'],
             'Date': date_val,
             'Type': type_display,
             'Vendor': txn['vendor'],
@@ -52,53 +52,47 @@ async def export_matches():
     with match_state_lock:
         matches = match_state['confirmed_matches']
     
-    if not matches:
-        return Response(
-            content="No matches to export",
-            media_type="text/plain",
-            status_code=404
-        )
-    
     output = io.StringIO()
     fieldnames = [
-        'Ledger_ID', 'Ledger_Date', 'Ledger_Type', 'Ledger_Vendor', 'Ledger_Description', 'Ledger_Amount',
-        'Bank_ID', 'Bank_Date', 'Bank_Type', 'Bank_Vendor', 'Bank_Description', 'Bank_Amount',
+        'Ledger_ID (Internal System ID)', 'Ledger_Date', 'Ledger_Type', 'Ledger_Vendor', 'Ledger_Description', 'Ledger_Amount',
+        'Bank_ID (Internal System ID)', 'Bank_Date', 'Bank_Type', 'Bank_Vendor', 'Bank_Description', 'Bank_Amount',
         'Match_Score', 'Confidence', 'Matched_At'
     ]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
     
-    for match in matches:
-        ledger = match['ledger_txn']
-        bank = match['bank_txn']
-        
-        ledger_date = ledger['date']
-        bank_date = bank['date']
-        if isinstance(ledger_date, str) and 'T' in ledger_date:
-            ledger_date = ledger_date.split('T')[0]
-        if isinstance(bank_date, str) and 'T' in bank_date:
-            bank_date = bank_date.split('T')[0]
-        
-        ledger_type = "Money In" if ledger.get('txn_type') == 'money_in' else "Money Out"
-        bank_type = "Money In" if bank.get('txn_type') == 'money_in' else "Money Out"
-        
-        writer.writerow({
-            'Ledger_ID': ledger['id'],
-            'Ledger_Date': ledger_date,
-            'Ledger_Type': ledger_type,
-            'Ledger_Vendor': ledger['vendor'],
-            'Ledger_Description': ledger['description'],
-            'Ledger_Amount': ledger['amount'],
-            'Bank_ID': bank['id'],
-            'Bank_Date': bank_date,
-            'Bank_Type': bank_type,
-            'Bank_Vendor': bank['vendor'],
-            'Bank_Description': bank['description'],
-            'Bank_Amount': bank['amount'],
-            'Match_Score': match.get('heuristic_score', 0),
-            'Confidence': match.get('confidence', 0),
-            'Matched_At': match.get('timestamp', ''),
-        })
+    if matches:
+        for match in matches:
+            ledger = match['ledger_txn']
+            bank = match['bank_txn']
+            
+            ledger_date = ledger['date']
+            bank_date = bank['date']
+            if isinstance(ledger_date, str) and 'T' in ledger_date:
+                ledger_date = ledger_date.split('T')[0]
+            if isinstance(bank_date, str) and 'T' in bank_date:
+                bank_date = bank_date.split('T')[0]
+            
+            ledger_type = "Money In" if ledger.get('txn_type') == 'money_in' else "Money Out"
+            bank_type = "Money In" if bank.get('txn_type') == 'money_in' else "Money Out"
+            
+            writer.writerow({
+                'Ledger_ID (Internal System ID)': ledger['id'],
+                'Ledger_Date': ledger_date,
+                'Ledger_Type': ledger_type,
+                'Ledger_Vendor': ledger['vendor'],
+                'Ledger_Description': ledger['description'],
+                'Ledger_Amount': ledger['amount'],
+                'Bank_ID (Internal System ID)': bank['id'],
+                'Bank_Date': bank_date,
+                'Bank_Type': bank_type,
+                'Bank_Vendor': bank['vendor'],
+                'Bank_Description': bank['description'],
+                'Bank_Amount': bank['amount'],
+                'Match_Score': match.get('heuristic_score', 0),
+                'Confidence': match.get('confidence', 0),
+                'Matched_At': match.get('timestamp', ''),
+            })
     
     return Response(
         content=output.getvalue(),
@@ -187,7 +181,7 @@ async def export_audit_trail():
         total_bank = len(normalized_bank)
         confirmed_matches = len(match_state['confirmed_matches'])
         rejected_matches = len(match_state['rejected_matches'])
-        flagged_duplicates = len(match_state['flagged_duplicates'])
+        excluded_transactions = len(match_state['flagged_duplicates'])  # Internal name is flagged_duplicates, but represents excluded transactions
         skipped_matches = len(match_state['skipped_matches'])
         unmatched_ledger_count = len([t for t in normalized_ledger if t['id'] not in matched_ledger_ids])
         unmatched_bank_count = len([t for t in normalized_bank if t['id'] not in matched_bank_ids])
@@ -195,12 +189,13 @@ async def export_audit_trail():
     # Construct export data outside lock using pre-calculated values
     export_data = {
         'export_timestamp': datetime.now().isoformat(),
+        'note': 'All IDs (ledger_id, bank_id) in this export are internal system identifiers generated during import and processing. They do not correspond to IDs from your original source files.',
         'summary': {
             'total_ledger_transactions': total_ledger,
             'total_bank_transactions': total_bank,
             'confirmed_matches': confirmed_matches,
             'rejected_matches': rejected_matches,
-            'flagged_duplicates': flagged_duplicates,
+            'excluded_transactions': excluded_transactions,
             'skipped_matches': skipped_matches,
             'unmatched_ledger': unmatched_ledger_count,
             'unmatched_bank': unmatched_bank_count,

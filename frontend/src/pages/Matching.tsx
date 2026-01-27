@@ -97,6 +97,10 @@ const Matching = () => {
   // Rejected matches modal state
   const [showRejectedModal, setShowRejectedModal] = useState(false);
 
+  // Export menu state
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
   // Loading states
   const [isRerunning, setIsRerunning] = useState(false);
 
@@ -227,6 +231,23 @@ const Matching = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Handle click outside to close export menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+
+    if (showExportMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showExportMenu]);
 
   const handleStartReview = async () => {
     try {
@@ -498,7 +519,7 @@ const Matching = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-200 via-blue-100 to-blue-200">
-      <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 transition-opacity duration-200 ${showReviewModal ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 transition-opacity duration-200 ${showReviewModal || showRejectedModal ? 'opacity-50 pointer-events-none' : ''}`}>
         {/* Title + actions row (Import-style, no box) */}
         <div className="mb-4 flex items-start justify-between flex-wrap gap-4">
           <div>
@@ -551,28 +572,31 @@ const Matching = () => {
               <Settings className="w-4 h-4" />
               Settings
             </button>
-            <div className="relative group z-[100]">
+            <div className="relative z-[100]" ref={exportMenuRef}>
               <button
+                onClick={() => setShowExportMenu(!showExportMenu)}
                 disabled={showReviewModal}
                 className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-gold to-yellow-500 text-primary-blue rounded-xl hover:shadow-xl hover:scale-105 transition-all duration-300 font-bold text-sm shadow-lg disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-lg"
               >
                 <Download className="w-4 h-4" />
                 Export
               </button>
-              <div className="absolute right-0 top-full mt-1 bg-white/95 backdrop-blur-sm border border-blue-300/50 rounded-xl shadow-2xl py-1 hidden group-hover:block z-[100] min-w-[180px]">
-                <button onClick={() => handleExport('matches')} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
-                  Matched Transactions
-                </button>
-                <button onClick={() => handleExport('ledger')} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
-                  Unmatched Ledger
-                </button>
-                <button onClick={() => handleExport('bank')} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
-                  Unmatched Bank
-                </button>
-                <button onClick={() => handleExport('audit')} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
-                  Audit Trail
-                </button>
-              </div>
+              {showExportMenu && (
+                <div className="absolute right-0 top-full mt-1 bg-white/95 backdrop-blur-sm border border-blue-300/50 rounded-xl shadow-2xl py-1 z-[100] min-w-[180px]">
+                  <button onClick={() => { handleExport('matches'); setShowExportMenu(false); }} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
+                    Matched Transactions
+                  </button>
+                  <button onClick={() => { handleExport('ledger'); setShowExportMenu(false); }} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
+                    Unmatched Ledger
+                  </button>
+                  <button onClick={() => { handleExport('bank'); setShowExportMenu(false); }} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
+                    Unmatched Bank
+                  </button>
+                  <button onClick={() => { handleExport('audit'); setShowExportMenu(false); }} className="w-full px-4 py-2 text-left hover:bg-blue-50/50 text-sm transition-colors">
+                    Audit Trail
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

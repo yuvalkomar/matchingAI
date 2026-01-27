@@ -209,3 +209,10 @@ export const restoreRejectedMatch = async (ledgerId: string, bankId: string): Pr
     bank_id: bankId,
   });
 };
+
+export const approveRejectedMatch = async (ledgerId: string, bankId: string): Promise<void> => {
+  await api.post('/match/approve-rejected', {
+    ledger_id: ledgerId,
+    bank_id: bankId,
+  });
+};

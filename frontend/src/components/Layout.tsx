@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { FileText, GitMerge } from 'lucide-react';
 
 interface LayoutProps {
@@ -50,17 +50,18 @@ const Layout = ({ children }: LayoutProps) => {
                   {navItems.map((item) => {
                     const Icon = item.icon;
                     return (
-                      <div
+                      <Link
                         key={item.path}
-                        className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                        to={item.path}
+                        className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
                           isActive(item.path)
                             ? 'border-primary-gold text-primary-blue'
-                            : 'border-transparent text-text-secondary opacity-60'
+                            : 'border-transparent text-text-secondary opacity-60 hover:text-primary-blue hover:opacity-100'
                         }`}
                       >
                         <Icon className="w-4 h-4 mr-2" />
                         {item.label}
-                      </div>
+                      </Link>
                     );
                   })}
                 </div>
