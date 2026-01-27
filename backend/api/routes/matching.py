@@ -276,12 +276,18 @@ async def pause_matching():
 
 @router.post("/resume")
 async def resume_matching():
-    """Resume the matching process from where it was paused."""
+    """Resume the matching process from where it was paused.
+    
+    This endpoint is idempotent - if matching is not paused or not in progress,
+    it returns success since the desired state (matching not paused) is already achieved.
+    """
     with match_state_lock:
         if not match_state['matching_in_progress']:
-            raise HTTPException(status_code=400, detail="Matching is not in progress")
+            # Matching not in progress - already in desired state
+            return {"status": "already_resumed", "message": "Matching is not in progress"}
         if not match_state.get('matching_paused', False):
-            raise HTTPException(status_code=400, detail="Matching is not paused")
+            # Matching not paused - already in desired state
+            return {"status": "already_resumed", "message": "Matching is not paused"}
         match_state['matching_paused'] = False
     return {"status": "resumed"}
 

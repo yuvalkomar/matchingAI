@@ -446,14 +446,22 @@ const Matching = () => {
 
   const handleResumeMatching = async () => {
     try {
-      await resumeMatching();
+      const response = await resumeMatching();
       // Start polling
       startPolling();
       // Fetch updated state directly
       const progress = await getMatchingProgress();
       setMatchingProgress(progress);
+      // Silently handle already-resumed state (e.g., after server reload)
+      if (response.status === 'already_resumed') {
+        // No need to show error - desired state already achieved
+        return;
+      }
     } catch (error: any) {
-      alert(`Resume failed: ${error.response?.data?.detail || error.message}`);
+      // Only show alert for unexpected errors
+      if (error.response?.status !== 400) {
+        alert(`Resume failed: ${error.response?.data?.detail || error.message}`);
+      }
     }
   };
 
