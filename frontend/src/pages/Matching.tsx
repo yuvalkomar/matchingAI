@@ -1077,10 +1077,12 @@ const Matching = () => {
           matchIndex={matchIndex}
           total={totalPending}
           onAction={handleMatchAction}
-          onClose={() => {
+          onClose={async () => {
             setShowReviewModal(false);
             setReviewReadOnly(false);
-            loadAllData();
+            // Backend's getPendingMatches() now returns all unhandled matches,
+            // so unhandled matches will remain visible even if modal is closed
+            await loadAllData();
           }}
           isSubmitting={isSubmitting}
           readOnly={reviewReadOnly}

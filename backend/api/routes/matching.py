@@ -359,14 +359,53 @@ async def run_matching(request: RunMatchingRequest):
 
 @router.get("/pending")
 async def get_pending_matches():
-    """Get all pending (not yet reviewed) matches with their indices. Order = suggestion order (ascending)."""
+    """Get all pending (not yet reviewed) matches with their indices. Order = suggestion order (ascending).
+    
+    Returns all matches from match_results that haven't been handled (approved/rejected/skipped).
+    This ensures unhandled matches remain visible even if current_index has advanced.
+    """
     with match_state_lock:
         results = match_state['match_results']
         current_idx = match_state['current_index']
-    pending = [
-        {"index": i, "match": results[i]}
-        for i in range(current_idx, len(results))
-    ]
+        
+        # Get sets of (ledger_id, bank_id) pairings for all handled matches
+        # This ensures we check the specific pairing, not just ledger_id or bank_id alone
+        confirmed_pairs = set()
+        for m in match_state['confirmed_matches']:
+            ledger_id = m['ledger_txn']['id']
+            bank_id = m.get('bank_txn', {}).get('id') if m.get('bank_txn') else None
+            confirmed_pairs.add((ledger_id, bank_id))
+        
+        rejected_pairs = set()
+        for m in match_state['rejected_matches']:
+            ledger_id = m['ledger_txn']['id']
+            bank_id = m.get('bank_txn', {}).get('id') if m.get('bank_txn') else None
+            rejected_pairs.add((ledger_id, bank_id))
+        
+        skipped_pairs = set()
+        for m in match_state['skipped_matches']:
+            ledger_id = m['ledger_txn']['id']
+            bank_id = m.get('bank_txn', {}).get('id') if m.get('bank_txn') else None
+            skipped_pairs.add((ledger_id, bank_id))
+        
+        # Return all matches that haven't been handled (approved/rejected/skipped)
+        # This ensures unhandled matches remain visible even if user closes modal without handling all matches
+        # IMPORTANT: Keep lock during iteration to prevent race conditions with concurrent modifications
+        pending = []
+        for i, result in enumerate(results):
+            ledger_id = result['ledger_txn']['id']
+            bank_id = result.get('bank_txn', {}).get('id') if result.get('bank_txn') else None
+            match_pair = (ledger_id, bank_id)
+            
+            # Check if this specific (ledger_id, bank_id) pairing has been handled
+            is_confirmed = match_pair in confirmed_pairs
+            is_rejected = match_pair in rejected_pairs
+            is_skipped = match_pair in skipped_pairs
+            
+            # Only include if not handled
+            if not (is_confirmed or is_rejected or is_skipped):
+                pending.append({"index": i, "match": result})
+    
     return {"matches": pending, "start_index": current_idx}
 
 
